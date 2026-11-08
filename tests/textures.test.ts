@@ -63,8 +63,10 @@ describe('BNTX decoding', () => {
     expect([...img.data.slice(0, 4)]).toEqual([255, 0, 0, 255]);
   });
 
-  it('skips ASTC instead of drawing garbage', () => {
-    expect(decodeTexture(tex(0x2d01, 4, 4, new Uint8Array(16)))).toBeNull();
+  it('marks invalid ASTC blocks with the error colour instead of garbage', () => {
+    // An all-zero block is a reserved block mode.
+    const img = decodeTexture(tex(0x2d01, 4, 4, new Uint8Array(512), [2, 3, 4, 5]))!;
+    expect([...img.data.slice(0, 4)]).toEqual([255, 0, 255, 255]);
   });
 });
 
@@ -162,5 +164,49 @@ describe('console accuracy rules', () => {
     expect(paletteColor(32, false)).toEqual([230, 0, 18, 255]);
     expect(paletteColor(9, true)).toEqual([255, 255, 255, 255]);
     expect(paletteColor(9999, false)).toBeUndefined();
+  });
+});
+
+describe('ASTC and framebuffer masks', () => {
+  it('decodes an ASTC void-extent block to its constant colour', async () => {
+    const { decodeAstcBlock } = await import('../src/lib/nx/astc');
+    const b = new Uint8Array(16);
+    // bits 0-8 = 0x1FC (void extent), bit 9 = 0 (LDR), bits 10-63 = 1, then RGBA as UNORM16
+    let bitsLo = 0x1fcn;
+    for (let i = 10n; i < 64n; i++) bitsLo |= 1n << i;
+    const rgba = [0x1234, 0xabcd, 0xff00, 0x8080];
+    for (let i = 0; i < 8; i++) b[i] = Number((bitsLo >> BigInt(i * 8)) & 0xffn);
+    rgba.forEach((v, i) => {
+      b[8 + i * 2] = v & 0xff;
+      b[9 + i * 2] = v >> 8;
+    });
+    const out = new Uint8ClampedArray(4 * 4 * 4);
+    decodeAstcBlock(b, 0, 4, 4, out);
+    expect([...out.slice(0, 4)]).toEqual([0x12, 0xab, 0xff, 0x80]);
+    expect([...out.slice(60, 64)]).toEqual([0x12, 0xab, 0xff, 0x80]);
+  });
+
+  it('turns dst-alpha blending into mask layers and text tints', async () => {
+    const { analyseMasks } = await import('../src/lib/layout/blend');
+    const mk = (name: string, kind: BflytPane['kind'], materialIndex: number): BflytPane => ({
+      kind, name, materialIndex, visible: true, alpha: 255, influenceAlpha: false, originX: 0, originY: 0, parentOriginX: 0, parentOriginY: 0,
+      position: { X: 0, Y: 0, Z: 0 }, rotation: { X: 0, Y: 0, Z: 0 }, scale: { X: 1, Y: 1 }, size: { X: 10, Y: 10 }, children: [],
+    });
+    const mat = (blend?: [number, number, number], blendAlpha?: [number, number, number]) => ({
+      name: 'm', black: '00000000', white: 'FFFFFFFF', textures: [], transforms: [],
+      ...(blend ? { blend: { op: blend[0], src: blend[1], dst: blend[2] } } : null),
+      ...(blendAlpha ? { blendAlpha: { op: blendAlpha[0], src: blendAlpha[1], dst: blendAlpha[2] } } : null),
+    });
+    const mats = [mat([1, 0, 1], [1, 4, 0]), mat([1, 6, 7]), mat([1, 0, 1], [1, 1, 0])];
+    const root = mk('N', 'pan1', -1);
+    root.children = [mk('P_Mask', 'pic1', 0), mk('P_Color', 'pic1', 1)];
+    const a = analyseMasks(root, mats);
+    expect(a.alphaOnly.has('P_Mask')).toBe(true);
+    expect(a.masked.get('P_Color')?.map((l) => l.pane.name)).toEqual(['P_Mask']);
+    const root2 = mk('N', 'pan1', -1);
+    root2.children = [mk('T_Main', 'txt1', 2), mk('P_Color', 'pic1', 1)];
+    const b = analyseMasks(root2, mats);
+    expect(b.textTint.get('T_Main')).toBe('P_Color');
+    expect(b.hiddenTargets.has('P_Color')).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+import { decodeAstcBlock } from './astc';
 import { BinaryReader } from './binary';
 
 /**
@@ -75,6 +76,12 @@ const FORMATS: Record<number, FormatInfo> = {
   0x32: { bpp: 16, bw: 8, bh: 5, name: 'ASTC 8x5' },
   0x33: { bpp: 16, bw: 8, bh: 6, name: 'ASTC 8x6' },
   0x34: { bpp: 16, bw: 8, bh: 8, name: 'ASTC 8x8' },
+  0x35: { bpp: 16, bw: 10, bh: 5, name: 'ASTC 10x5' },
+  0x36: { bpp: 16, bw: 10, bh: 6, name: 'ASTC 10x6' },
+  0x37: { bpp: 16, bw: 10, bh: 8, name: 'ASTC 10x8' },
+  0x38: { bpp: 16, bw: 10, bh: 10, name: 'ASTC 10x10' },
+  0x39: { bpp: 16, bw: 12, bh: 10, name: 'ASTC 12x10' },
+  0x3a: { bpp: 16, bw: 12, bh: 12, name: 'ASTC 12x12' },
 };
 
 export const formatName = (format: number) => FORMATS[format >> 8]?.name ?? `0x${format.toString(16)}`;
@@ -148,16 +155,16 @@ function bc4Block(b: Uint8Array, o: number, out: Uint8ClampedArray, ch: number) 
 
 /**
  * Decodes a texture's first mip to RGBA8 with the texture's channel mapping applied.
- * Returns null for formats the preview can't decode yet (ASTC).
+ * Returns null for formats the preview can't decode.
  */
 export function decodeTexture(t: BntxTexture): ImageDataLike | null {
   const fmt = FORMATS[t.format >> 8];
-  if (!fmt || isAstc(t.format)) return null;
+  if (!fmt) return null;
   const wB = Math.ceil(t.width / fmt.bw);
   const hB = Math.ceil(t.height / fmt.bh);
   const lin = deswizzle(t.data, wB, hB, fmt.bpp, t.blockHeightLog2);
   const raw = new Uint8ClampedArray(t.width * t.height * 4);
-  const block = new Uint8ClampedArray(64);
+  const block = new Uint8ClampedArray(fmt.bw * fmt.bh * 4);
 
   const put = (bx: number, by: number) => {
     for (let py = 0; py < fmt.bh; py++) {
@@ -166,7 +173,7 @@ export function decodeTexture(t: BntxTexture): ImageDataLike | null {
       for (let px = 0; px < fmt.bw; px++) {
         const x = bx * fmt.bw + px;
         if (x >= t.width) break;
-        raw.set(block.subarray((py * 4 + px) * 4, (py * 4 + px) * 4 + 4), (y * t.width + x) * 4);
+        raw.set(block.subarray((py * fmt.bw + px) * 4, (py * fmt.bw + px) * 4 + 4), (y * t.width + x) * 4);
       }
     }
   };
@@ -185,7 +192,8 @@ export function decodeTexture(t: BntxTexture): ImageDataLike | null {
         continue;
       }
       block.fill(0);
-      if (kind === 0x1a) bc1Block(lin, o, block, false);
+      if (kind >= 0x2d) decodeAstcBlock(lin, o, fmt.bw, fmt.bh, block);
+      else if (kind === 0x1a) bc1Block(lin, o, block, false);
       else if (kind === 0x1b) {
         bc1Block(lin, o + 8, block, true);
         for (let i = 0; i < 16; i++) block[i * 4 + 3] = ((lin[o + (i >> 1)] >> ((i & 1) * 4)) & 15) * 17;

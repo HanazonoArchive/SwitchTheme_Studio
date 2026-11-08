@@ -108,15 +108,33 @@ Checked side by side against real console captures (stock Basic White and Purple
   game art on the lock screen, "Change User", glyph + label buttons ("Continue",
   "Featured News"), and the All Software title.
 
+## Round 3: every screen, and the engine features behind them
+
+- **All seven screens render.** Settings, News, User Page and Player Select are built from the
+  layouts qlaunch instantiates by code (nav lists, pages, headers, news cards, user cards),
+  placed in their slots and scissored between the header and footer like the console.
+- **Vertical parent anchors were upside down** (top/bottom swapped). Fixing it put Player Select,
+  list rows and many small elements where they belong.
+- **Text position** inside its box was read from the wrong bits (same swap as the anchors).
+- **Parts magnify** (a resized part): positions and sizes scale, nothing is distorted, and
+  panes flagged "ignore parts magnify" keep their size. The lock screen news tiles and settings
+  rows now have the right shape, and text is no longer squashed.
+- **Framebuffer alpha masks** (`lib/layout/blend.ts`): panes that only write alpha, and panes
+  drawn through it (blend src = dstAlpha), are resolved into CSS masks or tinted text. Fixes the
+  Album icon, header titles and balloons.
+- **ASTC decoding** (`lib/nx/astc.ts`): all 47 ASTC textures in the 23.0.1 dump decode
+  identically to a reference decoder.
+- **Per-instance states**: the focused game plays FocusKey + Active (a theme's Active animation is
+  how Purple Skies enlarges it) and the running game shows its "Playing" badge.
+- Mocked runtime content: cursor, footer controller icon, Settings strings, news articles, profile,
+  play activity, user cards.
+
 ## Known gaps / next steps
 
-1. ASTC textures (a few effects and card frames per screen) are drawn as placeholders.
-2. Most UI text comes from message files, not layouts, so labels are absent except a few mocked strings.
-3. All Software row positions and Settings pages are set by code at runtime; the preview approximates them.
-4. Animations are applied as end states only. Playing them (and previewing a theme's custom
+1. UI text comes from message files, so strings are mocked (English) per screen.
+2. All Software row positions, Settings pages and news card content are set by code; the preview
+   approximates them with the real layouts.
+3. Animations are applied as end states only. Playing them (and previewing a theme's custom
    animations in motion) is a next step.
-5. Settings pages and the news tiles on the lock screen are built by code and are still mostly empty.
-6. Pane masks (the Album icon's fill) aren't rendered.
-7. The "Playing" badge and per-icon focus animations (a theme's `RdtBtnIconGame_Active`) aren't shown.
-8. Verified against a real firmware 23.0.1 dump: all 579 layouts parse, every parts pane resolves,
+4. Verified against a real firmware 23.0.1 dump: all 579 layouts parse, every parts pane resolves,
    and the sample themes' patches all match. Other firmware versions haven't been tested.

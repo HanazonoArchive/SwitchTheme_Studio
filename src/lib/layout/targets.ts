@@ -17,7 +17,7 @@ export const TARGETS: TargetInfo[] = [
   { target: 'apps', szs: 'Flaunch.szs', label: 'All Software', mainLayout: 'blyt/FlcCntMain.bflyt', allowCommon: false },
   { target: 'set', szs: 'Set.szs', label: 'System Settings', mainLayout: 'blyt/BaseTop.bflyt', allowCommon: false },
   { target: 'news', szs: 'Notification.szs', label: 'News', mainLayout: 'blyt/NtfBase.bflyt', allowCommon: false },
-  { target: 'user', szs: 'MyPage.szs', label: 'User Page', mainLayout: 'blyt/MypBase.bflyt', allowCommon: true },
+  { target: 'user', szs: 'MyPage.szs', label: 'User Page', mainLayout: 'blyt/BaseTop.bflyt', allowCommon: true },
   { target: 'psl', szs: 'Psl.szs', label: 'Player Select', mainLayout: 'blyt/PslSelectSinglePlayer.bflyt', allowCommon: true },
 ];
 

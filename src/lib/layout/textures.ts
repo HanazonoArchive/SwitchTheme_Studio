@@ -117,8 +117,10 @@ export function paneVisual(
     return c[3] < 2 ? null : { color: toCss(c) };
   }
 
-  const mirrorX = isMirror(ref.wrapS) && Math.max(Math.abs(u0), Math.abs(u1)) > 1.001;
-  const mirrorY = isMirror(ref.wrapT) && Math.max(Math.abs(v0), Math.abs(v1)) > 1.001;
+  // Mirror wrap with UVs outside 0..1 (e.g. -1..1 for a fade at both ends): tile a doubled texture.
+  const outside = (a: number, b: number) => Math.max(a, b) > 1.001 || Math.min(a, b) < -0.001;
+  const mirrorX = isMirror(ref.wrapS) && outside(u0, u1);
+  const mirrorY = isMirror(ref.wrapT) && outside(v0, v1);
 
   const key = `${ref.name}|${black.join(',')}|${white.join(',')}|${vertex.join(',')}|${mirrorX}|${mirrorY}`;
   let url = urlCache.get(key);

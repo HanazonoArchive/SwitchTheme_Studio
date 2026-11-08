@@ -42,6 +42,10 @@ export interface BflytPane {
   fontColor?: string;
   fontSize?: Vec2;
   textAlignX?: Origin;
+  textAlignY?: Origin;
+  /** Inside a resized part: keep this pane's size ('ignore') or stretch it to the part's
+   * bounds without scaling its content ('adjust'). Other panes scale with the part. */
+  partsMagnify?: 'ignore' | 'adjust';
   /** pic1/txt1/wnd1: index into the file's materials. */
   materialIndex?: number;
   /** pic1/wnd1 content: first UV set as [TL, TR, BL, BR]. */
@@ -69,6 +73,18 @@ export interface BflytMaterial {
   white: string;
   textures: TextureRef[];
   transforms: { x: number; y: number; rotation: number; scaleX: number; scaleY: number }[];
+  /** Framebuffer blend (colour, and separate alpha when present). Factors: 0 zero, 1 one,
+   * 2 dstColor, 3 1-dstColor, 4 srcAlpha, 5 1-srcAlpha, 6 dstAlpha, 7 1-dstAlpha. Op 0 = off, 1 = add. */
+  blend?: BlendMode;
+  blendAlpha?: BlendMode;
+  /** TEV combiner stages (colour mode, alpha mode) for multi-texture materials. */
+  tev?: [number, number][];
+}
+
+export interface BlendMode {
+  op: number;
+  src: number;
+  dst: number;
 }
 
 export interface BflytFile {
@@ -114,7 +130,29 @@ function readMaterials(r: BinaryReader, start: number, version: number, textures
       return { name: textures[id] ?? '', wrapS: r.u8(), wrapT: r.u8() };
     });
     const transforms = Array.from({ length: (flags >> 2) & 3 }, () => ({ x: r.f32(), y: r.f32(), rotation: r.f32(), scaleX: r.f32(), scaleY: r.f32() }));
-    return { name, black, white, textures: tex, transforms };
+    const mat: BflytMaterial = { name, black, white, textures: tex, transforms };
+    // texCoordGen entries are 16 bytes from layout version 8 (Switch), 4 before.
+    r.seek(r.pos + ((flags >> 4) & 3) * (version >= 0x08000000 ? 16 : 4));
+    const tevCount = (flags >> 6) & 7;
+    if (tevCount) {
+      mat.tev = Array.from({ length: tevCount }, () => {
+        const c = r.u8();
+        const a = r.u8();
+        r.u16();
+        return [c, a] as [number, number];
+      });
+    }
+    if (flags & (1 << 9)) r.seek(r.pos + 8); // alpha compare
+    const blend = (): BlendMode => {
+      const op = r.u8();
+      const src = r.u8();
+      const dst = r.u8();
+      r.u8();
+      return { op, src, dst };
+    };
+    if (flags & (1 << 10)) mat.blend = blend();
+    if (flags & (1 << 12)) mat.blendAlpha = blend();
+    return mat;
   });
 }
 
@@ -161,7 +199,7 @@ function readPane(r: BinaryReader, kind: PaneKind, sectionStart: number, section
   const flag1 = r.u8();
   const flag2 = r.u8();
   const alpha = r.u8();
-  r.u8();
+  const flagEx = r.u8();
   const name = r.fixedString(0x18);
   r.fixedString(0x08); // user info
   const position = { X: r.f32(), Y: r.f32(), Z: r.f32() };
@@ -175,6 +213,8 @@ function readPane(r: BinaryReader, kind: PaneKind, sectionStart: number, section
     visible: (flag1 & 1) === 1,
     influenceAlpha: (flag1 & 2) === 2,
     alpha,
+    // flagEx bit 0: IgnorePartsMagnify, bit 1: PartsMagnifyAdjustToPartsBound.
+    ...(flagEx & 3 ? { partsMagnify: flagEx & 1 ? ('ignore' as const) : ('adjust' as const) } : null),
     originX: ((flag2 >> 6) & 3) as Origin,
     originY: ((flag2 >> 4) & 3) as Origin,
     parentOriginX: ((flag2 >> 2) & 3) as Origin,
@@ -214,7 +254,9 @@ function readPane(r: BinaryReader, kind: PaneKind, sectionStart: number, section
       pane.materialIndex = r.u16();
       r.u16(); // font
       const align = r.u8();
-      pane.textAlignX = ((align >> 2) & 3) as Origin;
+      // Text position inside the box: bits 0-1 horizontal, 2-3 vertical (like the anchor byte).
+      pane.textAlignX = (align & 3) as Origin;
+      pane.textAlignY = ((align >> 2) & 3) as Origin;
       r.u8();
       r.u8();
       r.u8();

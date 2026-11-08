@@ -318,8 +318,9 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
               ) : (
                 <>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Defaults and exact positions come from your console's own files. NXThemes Installer saves them to{' '}
-                    <span className="font-mono text-slate-300">sd:/themes/systemData/</span> the first time it runs.
+                    Defaults and exact positions come from your console's own files. In NXThemes Installer open{' '}
+                    <span className="text-slate-300">Extract home menu → Extract szs layout files</span>, then copy{' '}
+                    <span className="font-mono text-slate-300">sd:/themes/systemData/extracted/qlaunch/lyt/*.szs</span>. An installed theme doesn't affect them.
                   </p>
                   <button
                     onClick={() => szsInputRef.current?.click()}

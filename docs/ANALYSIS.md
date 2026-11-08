@@ -38,7 +38,7 @@ Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/Swi
   text, parts).
 - `src/lib/layout/patch.ts`: the layout.json model with the injector's exact semantics. Edits are immutable,
   scoped to `(file, pane)`, write only changed fields, and always write full vectors.
-- **Exact preview.** Load the console's own `.szs` (NXThemes Installer dumps them to `sd:/themes/systemData/`).
+- **Exact preview.** Load the console's own `.szs` (NXThemes Installer → Extract home menu writes them to `sd:/themes/systemData/extracted/`).
   The real pane tree is rendered as nested DOM nodes, so parent transforms compose like on the console. Stock
   values show in the Inspector, with per-field revert. Files are kept in IndexedDB.
 - Without the `.szs`, the old mock is still used but clearly labelled **Approximate**.
@@ -58,5 +58,9 @@ Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/Swi
 3. `common.json` targets `common.szs`, which can't be loaded yet; it is passed through untouched.
 4. Parts property overrides (the prt1 entry list) are ignored; parts render their own layout.
 5. Root layout names for Settings, News, User page and Player select are guesses with an automatic fallback.
-6. The parser was tested against the injector's sample BFLYT and synthetic archives, not a real dumped
-   `ResidentMenu.szs`. That is the first thing to check.
+6. Verified against a real firmware 23.0.1 dump: all 579 layouts in the 7 archives parse, every parts pane
+   resolves, and 100% of the Vertical-OEM and FairTech home patches match real panes. qlaunch fills some
+   slots at runtime (game icons, account buttons, clock); the preview mocks those. The screen root for
+   Settings / User page is still a guess.
+7. Initial animation state (which popups start hidden) comes from `.bflan`; porting the Bflan reader from
+   SwitchThemesCommon is the next step after textures. Note both reference repos are GPL.

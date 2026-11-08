@@ -4,9 +4,10 @@ import { parseBflyt, type BflytFile } from '../nx/bflyt';
 import { targetFromSzsName, targetInfo } from './targets';
 
 /**
- * Stock layouts come from the user's own console. NXThemes Installer dumps them to
- * sd:/themes/systemData/*.szs the first time it runs, so we ask for those files instead
- * of shipping Nintendo's firmware data.
+ * Stock layouts come from the user's own console: NXThemes Installer's "Extract home menu"
+ * page writes them (read from system storage, so an installed theme doesn't affect them) to
+ * sd:/themes/systemData/extracted/{qlaunch,mypage,playerselect}/lyt/*.szs. We ask for those
+ * files instead of shipping Nintendo's firmware data.
  */
 export interface SystemLayout {
   target: ScreenTarget;

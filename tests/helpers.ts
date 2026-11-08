@@ -26,7 +26,8 @@ export function buildBflyt(root: TPane): Uint8Array {
   new DataView(lyt.buffer).setFloat32(8, 720, true);
   section('lyt1', lyt);
   const pane = (p: TPane) => {
-    const extra = p.kind === 'pic1' ? 0x14 : p.kind === 'prt1' ? 12 + 24 : 0;
+    const nameLen = p.partName ? Math.ceil((p.partName.length + 1) / 4) * 4 : 4;
+    const extra = p.kind === 'pic1' ? 0x14 : p.kind === 'prt1' ? 12 + nameLen : 0;
     const body = new Uint8Array(0x4c + extra);
     const v = new DataView(body.buffer);
     body[0] = p.visible === false ? 0 : 1;

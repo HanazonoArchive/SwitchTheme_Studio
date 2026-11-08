@@ -1,6 +1,7 @@
 import type { ScreenTarget } from '../../types/theme';
 import { parseSarc } from '../nx/sarc';
 import { parseBflyt, type BflytFile } from '../nx/bflyt';
+import { parseBntx, type BntxTexture } from '../nx/bntx';
 import { targetFromSzsName, targetInfo } from './targets';
 import { detectFirmware, firmwareLabel } from './installerFixes';
 
@@ -21,6 +22,10 @@ export interface SystemLayout {
   firmwareHint: string;
   /** Every file in the archive (animations included), for compatibility checks. */
   fileNames: Set<string>;
+  /** Raw .bflan files, parsed on demand to rebuild resting states. */
+  animations: Map<string, Uint8Array>;
+  /** Textures from timg/__Combined.bntx, decoded on demand. */
+  textures: Map<string, BntxTexture>;
   loadedAt: number;
 }
 
@@ -50,6 +55,16 @@ function pickMainLayout(preferred: string, layouts: Map<string, BflytFile>) {
   return best || [...layouts.keys()][0] || '';
 }
 
+function readTextures(bntx: Uint8Array | undefined) {
+  if (!bntx) return new Map<string, BntxTexture>();
+  try {
+    return parseBntx(bntx);
+  } catch (e) {
+    console.warn('Could not read textures', e);
+    return new Map<string, BntxTexture>();
+  }
+}
+
 export function parseSystemSzs(fileName: string, bytes: Uint8Array, forcedTarget?: ScreenTarget): SystemLayout {
   const target = forcedTarget ?? targetFromSzsName(fileName);
   if (!target) {
@@ -75,6 +90,8 @@ export function parseSystemSzs(fileName: string, bytes: Uint8Array, forcedTarget
     firmware: detectFirmware(target, new Set(files.keys())),
     firmwareHint: firmwareLabel(detectFirmware(target, new Set(files.keys()))),
     fileNames: new Set(files.keys()),
+    textures: readTextures(files.get('timg/__Combined.bntx')),
+    animations: new Map([...files].filter(([n]) => n.endsWith('.bflan'))),
     loadedAt: Date.now(),
   };
 }

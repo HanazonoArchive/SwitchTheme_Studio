@@ -182,7 +182,7 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
             onSelectPane(myPage.id);
           }}
           className={`absolute flex items-center gap-2.5 cursor-pointer p-1 rounded-full transition-transform ${
-            selectedPaneId === myPage.id ? 'ring-2 ring-[#10b981]' : ''
+            selectedPaneId === myPage.id ? 'ring-[3px] ring-[#39ff14] ring-offset-2 ring-offset-black' : ''
           }`}
           style={{
             left: `${640 + myPage.x}px`,
@@ -216,7 +216,7 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
             onSelectPane(hud.id);
           }}
           className={`absolute flex items-center gap-3.5 text-sm font-semibold tracking-wide cursor-pointer p-1 rounded transition-transform ${
-            selectedPaneId === hud.id ? 'ring-2 ring-[#10b981]' : ''
+            selectedPaneId === hud.id ? 'ring-[3px] ring-[#39ff14] ring-offset-2 ring-offset-black' : ''
           }`}
           style={{
             left: `${640 + hud.x - 220}px`,
@@ -293,7 +293,7 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
             onSelectPane(tip.id);
           }}
           className={`absolute flex items-center cursor-pointer transition ${
-            selectedPaneId === tip.id ? 'ring-2 ring-[#10b981]' : ''
+            selectedPaneId === tip.id ? 'ring-[3px] ring-[#39ff14] ring-offset-2 ring-offset-black' : ''
           }`}
           style={{
             left: `${focusX}px`,
@@ -322,7 +322,7 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
             onSelectPane(iconGame.id);
           }}
           className={`absolute cursor-pointer transition ${
-            selectedPaneId === iconGame.id ? 'ring-2 ring-[#10b981]/50' : ''
+            selectedPaneId === iconGame.id ? 'ring-[3px] ring-[#39ff14] ring-offset-2 ring-offset-black' : ''
           }`}
           style={{
             top: `${cardTop}px`,
@@ -415,7 +415,7 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
             onSelectPane(systemApplets.id);
           }}
           className={`absolute flex items-center justify-center gap-3.5 cursor-pointer p-1 rounded-full transition ${
-            selectedPaneId === systemApplets.id ? 'ring-2 ring-[#10b981]' : ''
+            selectedPaneId === systemApplets.id ? 'ring-[3px] ring-[#39ff14] ring-offset-2 ring-offset-black' : ''
           }`}
           style={{
             left: '50%',

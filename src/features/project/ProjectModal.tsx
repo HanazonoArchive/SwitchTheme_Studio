@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, FolderOpen, Plus, FileUp, Sparkles, Box, LayoutGrid } from 'lucide-react';
 import type { ThemeProject } from '../../types/theme';
-import { loadOemProject, parseNxThemeFiles } from './oemLoader';
+import { newScreen, readThemeFiles } from '../../lib/theme/nxtheme';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -27,90 +27,50 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Create new project from selected starter template
-  const handleCreateNewProject = async () => {
+  const run = async (fn: () => Promise<ThemeProject>) => {
     setIsLoading(true);
     setError(null);
     try {
-      const project = await loadOemProject();
+      const project = await fn();
+      onInitializeProject(project);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError((err as Error)?.message || 'Something went wrong.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchDemo = async (url: string) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Could not load ${url} (${res.status})`);
+    return readThemeFiles([{ name: url.split('/').pop()!, blob: await res.blob() }]);
+  };
+
+  const handleCreateNewProject = () =>
+    run(async () => {
+      let project: ThemeProject;
+      if (starterTemplate === 'vertical') {
+        project = await fetchDemo('/demos/vertical-oem.zip');
+      } else {
+        const screens = (['home', 'lock', 'apps'] as const).map(newScreen);
+        project = { id: `project-${Date.now()}`, name: '', author: '', screens, activeScreenId: screens[0].id };
+      }
       project.name = themeName.trim() || 'Untitled Theme';
       project.author = authorName.trim() || 'Unknown';
+      // Fresh theme metadata; layout credits (PatchName/AuthorName) stay with the template's author.
+      project.screens = project.screens.map((s) => ({ ...s, info: {} }));
+      return project;
+    });
 
-      // If user selected stock Nintendo layout, adjust icon dimensions
-      if (starterTemplate === 'stock') {
-        project.screens = project.screens.map((screen) => ({
-          ...screen,
-          isVerticalIcons: false,
-          layoutPatchName: 'Default (Nintendo Stock)',
-          panes: screen.panes.map((p) =>
-            p.name === 'P_IconGame' || p.name === 'P_BtnBase'
-              ? { ...p, width: 256, height: 256 }
-              : p
-          ),
-        }));
-      }
-
-      onInitializeProject(project);
-      onClose();
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || 'Failed to initialize project.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Open .nxtheme or .zip files from user's disk
-  const handleFilesSelected = async (files: FileList | null) => {
+  const handleFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const filePayloads = Array.from(files).map((f) => ({
-        name: f.name,
-        blob: f as Blob,
-      }));
-      const project = await parseNxThemeFiles(filePayloads);
-      onInitializeProject(project);
-      onClose();
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || 'Failed to parse theme files.');
-    } finally {
-      setIsLoading(false);
-    }
+    run(() => readThemeFiles(Array.from(files).map((f) => ({ name: f.name, blob: f as Blob }))));
   };
 
-  // Load preset demo themes
-  const handleLoadDemo = async (demo: 'vertical' | 'purpleskies') => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      if (demo === 'vertical') {
-        const project = await loadOemProject();
-        project.name = 'Vertical-OEM';
-        project.author = 'sodasoba';
-        onInitializeProject(project);
-      } else {
-        // Purple Skies demo with custom wallpaper
-        const project = await loadOemProject();
-        project.name = 'Purple Skies ANIMATED';
-        project.author = 'Hsushi';
-        project.screens = project.screens.map((s) => ({
-          ...s,
-          isVerticalIcons: false,
-          layoutPatchName: 'Default by Nintendo',
-        }));
-        onInitializeProject(project);
-      }
-      onClose();
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || 'Failed to load demo.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const handleLoadDemo = (demo: 'vertical' | 'purpleskies') =>
+    run(() => fetchDemo(demo === 'vertical' ? '/demos/vertical-oem.zip' : '/demos/purple-skies.zip'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none">
@@ -213,7 +173,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                       <span>Vertical OEM</span>
                     </div>
                     <span className="text-[10px] text-slate-400">
-                      Portrait 256×384 cards with OEM layout patch
+                      Start from the Vertical-OEM layout (portrait game cards)
                     </span>
                   </div>
 
@@ -227,10 +187,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   >
                     <div className="flex items-center gap-1.5 font-semibold text-xs">
                       <Box className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Nintendo Stock</span>
+                      <span>Stock layout</span>
                     </div>
                     <span className="text-[10px] text-slate-400">
-                      Square 256×256 standard Nintendo layout
+                      Home, Lock and All Apps with no changes
                     </span>
                   </div>
                 </div>
@@ -251,7 +211,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               <FileUp className="w-8 h-8 text-slate-500 group-hover:text-[#10b981] mx-auto transition" />
               <p className="text-xs font-semibold text-white">Click or drag &amp; drop .nxtheme or .zip files</p>
               <p className="text-[11px] text-slate-400">
-                Supports multiple screen themes (Home, Lockscreen, All Apps)
+                Pick several .nxtheme files (one per screen) or a Themezer pack .zip
               </p>
             </div>
           )}
@@ -265,7 +225,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 <div>
                   <div className="font-semibold text-xs text-white">Vertical-OEM (by sodasoba)</div>
                   <div className="text-[11px] text-slate-400">
-                    Type 2 layout-only theme (No background image, pure BFLYT coordinate patch)
+                    Layout-only theme: no image, keeps the console background
                   </div>
                 </div>
                 <span className="px-2 py-1 rounded bg-[#10b981]/10 text-[#10b981] font-medium text-[10px]">
@@ -280,7 +240,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 <div>
                   <div className="font-semibold text-xs text-white">Purple Skies (by Hsushi)</div>
                   <div className="text-[11px] text-slate-400">
-                    Type 1 artwork theme with custom animated wallpaper &amp; stock layout
+                    Image theme: custom backgrounds on 4 screens plus FairTech/Doge layouts
                   </div>
                 </div>
                 <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-medium text-[10px]">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Upload, Settings, Plus, X, MonitorPlay, PenTool } from 'lucide-react';
+import { Upload, Settings, Plus, X, MonitorPlay, PenTool, Undo2, Redo2 } from 'lucide-react';
 import type { ThemeProject } from '../../types/theme';
 
 interface TopBarProps {
@@ -9,6 +9,11 @@ interface TopBarProps {
   onOpenProjectModal: () => void;
   onCloseProject: () => void;
   onOpenExportModal: () => void;
+  onRenameProject: (name: string, author: string) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -18,6 +23,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenProjectModal,
   onCloseProject,
   onOpenExportModal,
+  onRenameProject,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }) => {
   return (
     <header className="h-12 bg-[#0c0e12] border-b border-[#1b1f28] px-4 flex items-center justify-between select-none shrink-0 z-20">
@@ -33,7 +43,19 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div className="flex items-center gap-1.5">
           {project ? (
             <div className="flex items-center bg-[#141720] border border-[#202532] rounded-md px-3 py-1 gap-2 text-xs text-white shadow-sm">
-              <span className="font-medium text-slate-200">{project.name}</span>
+              <input
+                value={project.name}
+                onChange={(e) => onRenameProject(e.target.value, project.author)}
+                className="bg-transparent font-medium text-slate-200 outline-none w-40 focus:text-white"
+                title="Theme name"
+              />
+              <span className="text-slate-600">by</span>
+              <input
+                value={project.author}
+                onChange={(e) => onRenameProject(project.name, e.target.value)}
+                className="bg-transparent text-slate-400 outline-none w-24 focus:text-white"
+                title="Author"
+              />
               <button
                 onClick={onCloseProject}
                 className="text-slate-400 hover:text-red-400 transition p-0.5 rounded hover:bg-[#1f2430]"
@@ -86,6 +108,24 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5 mr-1">
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-[#1a1f29] disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-[#1a1f29] disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </div>
         <button
           onClick={onOpenExportModal}
           disabled={!project}
@@ -98,10 +138,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           onClick={onOpenProjectModal}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#13161d] hover:bg-[#1a1f29] border border-[#202532] text-slate-300 text-xs font-medium transition"
-          title="Project settings"
+          title="New or open theme"
         >
           <Settings className="w-3.5 h-3.5 text-slate-400" />
-          <span>Settings</span>
+          <span>Project</span>
         </button>
       </div>
     </header>

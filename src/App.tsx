@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
-import type { ThemeProject, ThemeScreen, PaneNode } from './types/theme';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ThemeProject, ThemeScreen } from './types/theme';
 import type { MockSystemState } from './types/simulation';
 import type { RailTab } from './features/editor/LeftRail';
-import type { OemComponentDefinition } from './constants/switchPanes';
 import { DEFAULT_MOCK_USERS, DEFAULT_MOCK_GAMES } from './constants/switchPanes';
 
 import { TopBar } from './features/editor/TopBar';
@@ -13,13 +12,22 @@ import { Inspector } from './features/editor/Inspector';
 import { ScreenTimeline } from './features/editor/ScreenTimeline';
 import { ProjectModal } from './features/project/ProjectModal';
 import { ExportModal } from './features/project/ExportModal';
-import { AddComponentModal } from './features/editor/AddComponentModal';
+
+import { useHistory } from './lib/state/useHistory';
+import { editPane, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
+import { getPaneInfo } from './lib/layout/paneModel';
+import { loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
+import { loadWallpaper } from './lib/theme/images';
+import { newScreen } from './lib/theme/nxtheme';
+import type { ScreenTarget } from './types/theme';
 
 export function App() {
-  // Theme Project State: Starts as null, so user is prompted to open or create
-  const [project, setProject] = useState<ThemeProject | null>(null);
+  const history = useHistory<ThemeProject | null>(null);
+  const project = history.value;
 
-  // Mock Environment State
+  const [systemLayouts, setSystemLayouts] = useState<SystemLayoutMap>({});
+  const [systemError, setSystemError] = useState<string | null>(null);
+
   const [mockState, setMockState] = useState<MockSystemState>({
     time: '12:00',
     battery: 85,
@@ -33,235 +41,204 @@ export function App() {
     canvasZoom: 1.0,
   });
 
-  // Navigation & Selection State
   const [activeRailTab, setActiveRailTab] = useState<RailTab>('media');
   const [activeTopTab, setActiveTopTab] = useState<'editor' | 'motion'>('editor');
-  const [selectedPaneId, setSelectedPaneId] = useState<string | null>(null);
-
-  // Modals: Project Modal starts open if no project is loaded
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // Which screen is open is view state, not part of undo history.
+  const [activeScreenId, setActiveScreenId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(true);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [isAddComponentModalOpen, setIsAddComponentModalOpen] = useState(false);
 
-  // Keyboard navigation for carousel in Live Simulator
+  // Stock layouts from the user's console, remembered between sessions.
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if (e.key === 'ArrowRight' || e.key === 'd') {
-        setMockState((prev) => ({
-          ...prev,
-          selectedGameIndex: Math.min(prev.games.length - 1, prev.selectedGameIndex + 1),
-        }));
-      } else if (e.key === 'ArrowLeft' || e.key === 'a') {
-        setMockState((prev) => ({
-          ...prev,
-          selectedGameIndex: Math.max(0, prev.selectedGameIndex - 1),
-        }));
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    loadSavedSystemLayouts().then((saved) => setSystemLayouts((prev) => ({ ...saved, ...prev })));
   }, []);
 
-  const activeScreen = project
-    ? project.screens.find((s) => s.id === project.activeScreenId) || project.screens[0]
-    : null;
+  const activeScreen = project ? project.screens.find((s) => s.id === activeScreenId) || project.screens[0] : null;
+  const activeId = activeScreen?.id ?? null;
+  const activeSystem = activeScreen ? systemLayouts[activeScreen.target] : undefined;
+  const isEditor = activeTopTab === 'editor';
 
-  const selectedPane =
-    activeScreen?.panes.find((p) => p.id === selectedPaneId) || null;
+  const updateActiveScreen = useCallback(
+    (updates: Partial<ThemeScreen> | ((s: ThemeScreen) => Partial<ThemeScreen>), opts?: { transient?: boolean }) => {
+      history.set((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          screens: prev.screens.map((s) =>
+            s.id === activeId ? { ...s, ...(typeof updates === 'function' ? updates(s) : updates) } : s,
+          ),
+        };
+      }, opts);
+    },
+    [history, activeId],
+  );
 
-  const handleUpdateActiveScreen = (updates: Partial<ThemeScreen>) => {
-    if (!project) return;
-    setProject((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        screens: prev.screens.map((screen) =>
-          screen.id === prev.activeScreenId ? { ...screen, ...updates } : screen
-        ),
-      };
-    });
-  };
+  /* ------------------------------ pane editing ------------------------------ */
 
-  // Live Inspector Updates: Updates panes and synchronizes layout.json patches
-  const handleUpdatePane = (paneId: string, updates: Partial<PaneNode>) => {
-    if (!activeScreen) return;
+  const handleEditPane = useCallback(
+    (key: string, edit: PaneEdit, opts?: { transient?: boolean }) => {
+      updateActiveScreen((s) => {
+        const info = getPaneInfo(s.layout, systemLayouts[s.target], key);
+        return { layout: editPane(s.layout, info.file, info.name, info.current, edit) };
+      }, opts);
+    },
+    [updateActiveScreen, systemLayouts],
+  );
 
-    const updatedPanes = activeScreen.panes.map((p) =>
-      p.id === paneId ? { ...p, ...updates } : p
-    );
+  const handleRevertPane = useCallback(
+    (key: string, field?: keyof PanePatch) => {
+      updateActiveScreen((s) => {
+        const info = getPaneInfo(s.layout, systemLayouts[s.target], key);
+        return { layout: revertPane(s.layout, info.file, info.name, field) };
+      });
+    },
+    [updateActiveScreen, systemLayouts],
+  );
 
-    const targetPane = updatedPanes.find((p) => p.id === paneId);
-    if (!targetPane) return;
-
-    // Update layoutJson patch structure
-    const currentFiles = [...(activeScreen.layoutJson?.Files || [])];
-    let fileFound = false;
-
-    for (let f of currentFiles) {
-      if (Array.isArray(f.Patches)) {
-        const patchIdx = f.Patches.findIndex((pt: any) => pt.PaneName === targetPane.name);
-        if (patchIdx >= 0) {
-          f.Patches[patchIdx] = {
-            ...f.Patches[patchIdx],
-            Position: { X: targetPane.x, Y: targetPane.y },
-            Size: { X: targetPane.width, Y: targetPane.height },
-            Scale: { X: targetPane.scaleX, Y: targetPane.scaleY },
-            Visible: targetPane.visible,
-          };
-          fileFound = true;
-          break;
-        }
+  // Drag on canvas: remember where the pane started, write absolute positions while moving.
+  const dragBase = useRef<PaneState | null>(null);
+  const handleDragPane = useCallback(
+    (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => {
+      if (!activeScreen) return;
+      if (phase === 'start') {
+        dragBase.current = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], key).current;
+        return;
       }
-    }
+      if (phase === 'end') {
+        dragBase.current = null;
+        history.commit();
+        return;
+      }
+      const base = dragBase.current;
+      if (!base || (dx === 0 && dy === 0)) return;
+      handleEditPane(key, { position: { X: Math.round(base.position.X + dx), Y: Math.round(base.position.Y + dy) } }, { transient: true });
+    },
+    [activeScreen, systemLayouts, handleEditPane, history],
+  );
 
-    if (!fileFound) {
-      currentFiles.push({
-        FileName: 'blyt/RdtBase.bflyt',
-        Patches: [
-          {
-            PaneName: targetPane.name,
-            Position: { X: targetPane.x, Y: targetPane.y },
-            Size: { X: targetPane.width, Y: targetPane.height },
-            Scale: { X: targetPane.scaleX, Y: targetPane.scaleY },
-            Visible: targetPane.visible,
-          },
-        ],
-      });
-    }
+  /* ------------------------------ keyboard ------------------------------ */
 
-    handleUpdateActiveScreen({
-      panes: updatedPanes,
-      layoutJson: {
-        ...activeScreen.layoutJson,
-        Files: currentFiles,
-      },
-    });
-  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) history.redo();
+        else history.undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        history.redo();
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSelectedKey(null);
+        return;
+      }
 
-  // Add Switch Component from OEM palette modal
-  const handleAddComponent = (compDef: OemComponentDefinition) => {
-    if (!activeScreen) return;
+      // Editor with a selection: arrows nudge the pane (Shift = 10 units).
+      if (isEditor && selectedKey && e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        if (!activeScreen) return;
+        const step = e.shiftKey ? 10 : 1;
+        const cur = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], selectedKey).current.position;
+        const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key] ?? [0, 0];
+        handleEditPane(selectedKey, { position: { X: cur.X + d[0], Y: cur.Y + d[1] } });
+        return;
+      }
 
-    const newPaneId = `pane-${activeScreen.target}-${compDef.name}-${Date.now()}`;
-    const newPane: PaneNode = {
-      ...compDef.defaultPane,
-      id: newPaneId,
-    };
-
-    const updatedPanes = [...activeScreen.panes, newPane];
-
-    // Append patch to layoutJson
-    const currentFiles = [...(activeScreen.layoutJson?.Files || [])];
-    const targetFile = currentFiles.find((f: any) => f.FileName === compDef.targetFile);
-
-    if (targetFile) {
-      targetFile.Patches = targetFile.Patches || [];
-      targetFile.Patches.push({
-        PaneName: compDef.name,
-        Position: { X: compDef.defaultPane.x, Y: compDef.defaultPane.y },
-        Size: { X: compDef.defaultPane.width, Y: compDef.defaultPane.height },
-        Scale: { X: compDef.defaultPane.scaleX, Y: compDef.defaultPane.scaleY },
-        Visible: compDef.defaultPane.visible,
-      });
-    } else {
-      currentFiles.push({
-        FileName: compDef.targetFile,
-        Patches: [
-          {
-            PaneName: compDef.name,
-            Position: { X: compDef.defaultPane.x, Y: compDef.defaultPane.y },
-            Size: { X: compDef.defaultPane.width, Y: compDef.defaultPane.height },
-            Scale: { X: compDef.defaultPane.scaleX, Y: compDef.defaultPane.scaleY },
-            Visible: compDef.defaultPane.visible,
-          },
-        ],
-      });
-    }
-
-    handleUpdateActiveScreen({
-      panes: updatedPanes,
-      layoutJson: {
-        ...activeScreen.layoutJson,
-        Files: currentFiles,
-      },
-    });
-
-    setSelectedPaneId(newPaneId);
-  };
-
-  // Delete component from screen and layout.json
-  const handleDeletePane = (paneId: string) => {
-    if (!activeScreen) return;
-
-    const paneToDelete = activeScreen.panes.find((p) => p.id === paneId);
-    if (!paneToDelete) return;
-
-    const updatedPanes = activeScreen.panes.filter((p) => p.id !== paneId);
-
-    // Remove from layoutJson
-    const currentFiles = (activeScreen.layoutJson?.Files || []).map((f: any) => ({
-      ...f,
-      Patches: (f.Patches || []).filter((pt: any) => pt.PaneName !== paneToDelete.name),
-    }));
-
-    handleUpdateActiveScreen({
-      panes: updatedPanes,
-      layoutJson: {
-        ...activeScreen.layoutJson,
-        Files: currentFiles,
-      },
-    });
-
-    if (selectedPaneId === paneId) {
-      setSelectedPaneId(null);
-    }
-  };
-
-  const handleCloseProject = () => {
-    setProject(null);
-    setSelectedPaneId(null);
-    setIsProjectModalOpen(true);
-  };
-
-  const handleReplaceWallpaper = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        handleUpdateActiveScreen({
-          wallpaperUrl: e.target.result,
-          wallpaperFileName: file.name,
-        });
+      // Otherwise arrows / A / D drive the simulated game carousel.
+      if (e.key === 'ArrowRight' || e.key === 'd') {
+        setMockState((p) => ({ ...p, selectedGameIndex: Math.min(p.games.length - 1, p.selectedGameIndex + 1) }));
+      } else if (e.key === 'ArrowLeft' || e.key === 'a') {
+        setMockState((p) => ({ ...p, selectedGameIndex: Math.max(0, p.selectedGameIndex - 1) }));
       }
     };
-    reader.readAsDataURL(file);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [history, isEditor, selectedKey, activeScreen, systemLayouts, handleEditPane]);
+
+  /* ------------------------------ background ------------------------------ */
+
+  const handleReplaceWallpaper = async (file: File) => {
+    try {
+      const wallpaper = await loadWallpaper(file, file.name);
+      updateActiveScreen({ wallpaper });
+    } catch (e) {
+      alert((e as Error).message);
+    }
   };
 
   const handleExtractWallpaper = () => {
-    if (!activeScreen?.wallpaperUrl) return;
+    const w = activeScreen?.wallpaper;
+    if (!w) return;
     const a = document.createElement('a');
-    a.href = activeScreen.wallpaperUrl;
-    a.download = activeScreen.wallpaperFileName || `${activeScreen.target}_wallpaper.jpg`;
-    document.body.appendChild(a);
+    a.href = URL.createObjectURL(w.blob);
+    a.download = w.fileName;
     a.click();
-    document.body.removeChild(a);
+  };
+
+  /* ------------------------------ system layouts ------------------------------ */
+
+  const handleLoadSystemSzs = async (files: File[]) => {
+    setSystemError(null);
+    for (const f of files) {
+      try {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        const sys = parseSystemSzs(f.name, bytes);
+        setSystemLayouts((prev) => ({ ...prev, [sys.target]: sys }));
+        saveSystemSzs(sys.target, f.name, bytes);
+      } catch (e) {
+        setSystemError((e as Error).message);
+      }
+    }
+  };
+
+  const handleForgetSystemSzs = (target: ScreenTarget) => {
+    setSystemLayouts((prev) => {
+      const next = { ...prev };
+      delete next[target];
+      return next;
+    });
+    removeSystemSzs(target);
+  };
+
+  const handleAddScreen = (target: ScreenTarget) => {
+    const existing = project?.screens.find((s) => s.target === target);
+    if (existing) {
+      setActiveScreenId(existing.id);
+    } else {
+      const screen = newScreen(target);
+      history.set((prev) => (prev ? { ...prev, screens: [...prev.screens, screen] } : prev));
+      setActiveScreenId(screen.id);
+    }
+    setSelectedKey(null);
   };
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0b0d11] text-[#f1f5f9] select-none font-sans">
-      {/* 1. Top Bar with Project Tabs, Close button, and Mode Tabs */}
       <TopBar
         project={project}
         activeTab={activeTopTab}
         onSelectTab={setActiveTopTab}
         onOpenProjectModal={() => setIsProjectModalOpen(true)}
-        onCloseProject={handleCloseProject}
+        onCloseProject={() => {
+          history.reset(null);
+          setSelectedKey(null);
+          setIsProjectModalOpen(true);
+        }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
+        onRenameProject={(name, author) => history.set((p) => (p ? { ...p, name, author } : p))}
+        canUndo={history.canUndo}
+        canRedo={history.canRedo}
+        onUndo={history.undo}
+        onRedo={history.redo}
       />
 
-      {/* 2. Middle Studio Workspace */}
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         <LeftRail activeTab={activeRailTab} onSelectTab={setActiveRailTab} />
 
@@ -269,78 +246,79 @@ export function App() {
           <LeftDrawer
             activeTab={activeRailTab}
             activeScreen={activeScreen}
+            system={activeSystem}
+            systemLayouts={systemLayouts}
+            systemError={systemError}
             mockState={mockState}
-            selectedPaneId={selectedPaneId}
-            onSelectPane={setSelectedPaneId}
-            onUpdateActiveScreen={handleUpdateActiveScreen}
-            onUpdateMockState={(updates) => setMockState((prev) => ({ ...prev, ...updates }))}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+            onUpdateActiveScreen={updateActiveScreen}
+            onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
             onReplaceWallpaper={handleReplaceWallpaper}
             onExtractWallpaper={handleExtractWallpaper}
-            onOpenAddComponentModal={() => setIsAddComponentModalOpen(true)}
-            onDeletePane={handleDeletePane}
+            onEditPane={handleEditPane}
+            onRevertPane={handleRevertPane}
+            onLoadSystemSzs={handleLoadSystemSzs}
+            onForgetSystemSzs={handleForgetSystemSzs}
+            onCommitHistory={history.commit}
           />
         )}
 
         <Viewport
           activeScreen={activeScreen}
+          system={activeSystem}
           mockState={mockState}
           activeTopTab={activeTopTab}
-          selectedPaneId={selectedPaneId}
-          onSelectPane={setSelectedPaneId}
-          onUpdateMockState={(updates) => setMockState((prev) => ({ ...prev, ...updates }))}
-          onDropWallpaper={handleReplaceWallpaper}
+          selectedKey={selectedKey}
+          onSelect={setSelectedKey}
+          onDragPane={handleDragPane}
+          onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
+          onDropFile={(file) => {
+            if (file.name.toLowerCase().endsWith('.szs')) handleLoadSystemSzs([file]);
+            else handleReplaceWallpaper(file);
+          }}
           onOpenProjectModal={() => setIsProjectModalOpen(true)}
+          onOpenPanes={() => setActiveRailTab('panes')}
         />
 
         {activeScreen && (
           <Inspector
             activeScreen={activeScreen}
-            selectedPane={selectedPane}
-            onUpdatePane={handleUpdatePane}
-            onDeletePane={handleDeletePane}
+            system={activeSystem}
+            selectedKey={selectedKey}
+            onEditPane={handleEditPane}
+            onRevertPane={handleRevertPane}
           />
         )}
       </div>
 
-      {/* 3. Bottom Timeline / Slide Strip (when project is loaded) */}
       {project && (
         <ScreenTimeline
           screens={project.screens}
-          activeScreenId={project.activeScreenId}
-          onSelectScreen={(screenId) => {
-            setProject((prev) => (prev ? { ...prev, activeScreenId: screenId } : null));
-            setSelectedPaneId(null);
+          activeScreenId={activeScreen?.id ?? ''}
+          systemLayouts={systemLayouts}
+          onSelectScreen={(id) => {
+            setActiveScreenId(id);
+            setSelectedKey(null);
           }}
+          onAddScreen={handleAddScreen}
         />
       )}
 
-      {/* Project Setup Modal */}
       <ProjectModal
         isOpen={isProjectModalOpen}
         canClose={Boolean(project)}
         onClose={() => setIsProjectModalOpen(false)}
-        onInitializeProject={(newProj) => {
-          setProject(newProj);
-          setSelectedPaneId(null);
+        onInitializeProject={(p) => {
+          history.reset(p);
+          setActiveScreenId(p.activeScreenId);
+          setSelectedKey(null);
           setIsProjectModalOpen(false);
         }}
       />
 
-      {/* Add BFLYT Component Modal */}
-      <AddComponentModal
-        isOpen={isAddComponentModalOpen}
-        onClose={() => setIsAddComponentModalOpen(false)}
-        onSelectComponent={handleAddComponent}
-      />
-
-      {/* Export Theme Modal */}
-      {project && activeScreen && (
-        <ExportModal
-          isOpen={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
-          project={project}
-          activeScreen={activeScreen}
-        />
+      {project && (
+        <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} project={project} activeScreen={activeScreen!} />
       )}
     </div>
   );

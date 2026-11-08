@@ -17,7 +17,7 @@ import { useHistory } from './lib/state/useHistory';
 import { editPane, hasLayoutChanges, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
 import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
-import { loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
+import { isCommonSzs, loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
 import { loadWallpaper } from './lib/theme/images';
 import { newScreen } from './lib/theme/nxtheme';
 import type { ScreenTarget } from './types/theme';
@@ -195,8 +195,9 @@ export function App() {
       try {
         const bytes = new Uint8Array(await f.arrayBuffer());
         const sys = parseSystemSzs(f.name, bytes);
-        setSystemLayouts((prev) => ({ ...prev, [sys.target]: sys }));
-        saveSystemSzs(sys.target, f.name, bytes);
+        const slot = isCommonSzs(f.name) ? 'common' : sys.target;
+        setSystemLayouts((prev) => ({ ...prev, [slot]: sys }));
+        saveSystemSzs(slot, f.name, bytes);
       } catch (e) {
         setSystemError((e as Error).message);
       }
@@ -272,6 +273,7 @@ export function App() {
         <Viewport
           activeScreen={activeScreen}
           system={activeSystem}
+          common={systemLayouts.common}
           mockState={mockState}
           activeTopTab={activeTopTab}
           selectedKey={selectedKey}

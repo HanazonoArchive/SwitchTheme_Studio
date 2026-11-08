@@ -113,6 +113,6 @@ describe('system layouts', () => {
   });
 
   it('rejects files that are not theme targets', () => {
-    expect(() => parseSystemSzs('common.szs', szs)).toThrow(/isn't a known theme target/);
+    expect(() => parseSystemSzs('Banner.szs', szs)).toThrow(/isn't a known theme target/);
   });
 });

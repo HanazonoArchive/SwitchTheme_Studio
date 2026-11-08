@@ -29,7 +29,10 @@ export interface SystemLayout {
   loadedAt: number;
 }
 
-export type SystemLayoutMap = Partial<Record<ScreenTarget, SystemLayout>>;
+/** Screen archives by target, plus common.szs (shared footer/header layouts) under "common". */
+export type SystemLayoutMap = Partial<Record<ScreenTarget | 'common', SystemLayout>>;
+
+export const isCommonSzs = (fileName: string) => /(^|[\\/])common\.szs$/i.test(fileName);
 
 /** Picks the layout to preview: the configured one if present, otherwise the largest layout no other layout uses as a part. */
 function pickMainLayout(preferred: string, layouts: Map<string, BflytFile>) {
@@ -66,9 +69,10 @@ function readTextures(bntx: Uint8Array | undefined) {
 }
 
 export function parseSystemSzs(fileName: string, bytes: Uint8Array, forcedTarget?: ScreenTarget): SystemLayout {
-  const target = forcedTarget ?? targetFromSzsName(fileName);
+  const common = isCommonSzs(fileName);
+  const target = forcedTarget ?? targetFromSzsName(fileName) ?? (common ? 'home' : null);
   if (!target) {
-    throw new Error(`"${fileName}" isn't a known theme target. Expected ResidentMenu.szs, Entrance.szs, Flaunch.szs, Set.szs, Notification.szs, MyPage.szs or Psl.szs.`);
+    throw new Error(`"${fileName}" isn't a known theme target. Expected ResidentMenu.szs, Entrance.szs, Flaunch.szs, Set.szs, Notification.szs, MyPage.szs, Psl.szs or common.szs.`);
   }
   const files = parseSarc(bytes);
   const layouts = new Map<string, BflytFile>();
@@ -84,9 +88,9 @@ export function parseSystemSzs(fileName: string, bytes: Uint8Array, forcedTarget
   const info = targetInfo(target);
   return {
     target,
-    szsName: info.szs,
+    szsName: common ? 'common.szs' : info.szs,
     layouts,
-    mainLayout: pickMainLayout(info.mainLayout, layouts),
+    mainLayout: common ? 'blyt/FooterAll.bflyt' : pickMainLayout(info.mainLayout, layouts),
     firmware: detectFirmware(target, new Set(files.keys())),
     firmwareHint: firmwareLabel(detectFirmware(target, new Set(files.keys()))),
     fileNames: new Set(files.keys()),
@@ -120,7 +124,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveSystemSzs(target: ScreenTarget, fileName: string, bytes: Uint8Array) {
+export async function saveSystemSzs(target: ScreenTarget | 'common', fileName: string, bytes: Uint8Array) {
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -134,7 +138,7 @@ export async function saveSystemSzs(target: ScreenTarget, fileName: string, byte
   }
 }
 
-export async function removeSystemSzs(target: ScreenTarget) {
+export async function removeSystemSzs(target: ScreenTarget | 'common') {
   try {
     const db = await openDb();
     db.transaction(STORE, 'readwrite').objectStore(STORE).delete(target);
@@ -162,8 +166,9 @@ export async function loadSavedSystemLayouts(): Promise<SystemLayoutMap> {
     });
     for (const { key, value } of entries) {
       try {
-        const sys = parseSystemSzs(value.fileName, value.bytes, key as ScreenTarget);
-        out[sys.target] = sys;
+        const isCommon = key === 'common';
+        const sys = parseSystemSzs(value.fileName, value.bytes, isCommon ? undefined : (key as ScreenTarget));
+        out[isCommon ? 'common' : sys.target] = sys;
       } catch (e) {
         console.warn('Saved system layout is unreadable, dropping it', e);
       }

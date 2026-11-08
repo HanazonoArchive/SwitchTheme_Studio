@@ -86,6 +86,28 @@ tool from an edited `.szs`), and its BFLAN editor and templates for building ani
   where qlaunch creates them by code. Layout text is always a developer placeholder, so only known
   runtime strings are shown.
 
+## Matching real-console screenshots
+
+Checked side by side against real console captures (stock Basic White and Purple Skies):
+
+- **Anchor bits were read backwards.** nn::ui2d stores origin X/Y in bits 0-3 and the parent
+  anchor in bits 4-7 of the pane's anchor byte. SwitchThemeInjector (and therefore `layout.json`)
+  names those same bits the other way round. The renderer now places panes the way the console
+  does (`lib/layout/geometry.ts`), and the Inspector labels the fields by their effect. This
+  put the footer, the lock screen's left panel and Purple Skies' five lock tiles where they
+  belong.
+- **Footer from `common.szs`** (line + button hints) is drawn on Home, All Software and Settings.
+- **System palette:** most UI colours are palette indices (`C_W` / `C_B` user data) that qlaunch
+  resolves at runtime. `lib/layout/palette.ts` holds values calibrated from screenshots.
+- **Extreme scales:** themes hide or stretch rows with scales like 1e-5 × 100000. Browsers
+  drop such layers, so cancelling scales are folded into the children before drawing.
+- **Clamped UVs:** panes that sample one edge texel (UV 0..390 with clamp) draw as a solid colour.
+- **Runtime-only states hidden:** alarm overlay, parental-controls pill, "press the same button"
+  prompt, suspended-applet button, news "new" badges.
+- **Runtime content mocked:** HUD clock/battery (instead of the digit glyph parts), suspended
+  game art on the lock screen, "Change User", glyph + label buttons ("Continue",
+  "Featured News"), and the All Software title.
+
 ## Known gaps / next steps
 
 1. ASTC textures (a few effects and card frames per screen) are drawn as placeholders.
@@ -93,6 +115,8 @@ tool from an edited `.szs`), and its BFLAN editor and templates for building ani
 3. All Software row positions and Settings pages are set by code at runtime; the preview approximates them.
 4. Animations are applied as end states only. Playing them (and previewing a theme's custom
    animations in motion) is a next step.
-5. `common.json` targets `common.szs`, which can't be loaded yet; it is passed through untouched.
-6. Verified against a real firmware 23.0.1 dump: all 579 layouts parse, every parts pane resolves,
+5. Settings pages and the news tiles on the lock screen are built by code and are still mostly empty.
+6. Pane masks (the Album icon's fill) aren't rendered.
+7. The "Playing" badge and per-icon focus animations (a theme's `RdtBtnIconGame_Active`) aren't shown.
+8. Verified against a real firmware 23.0.1 dump: all 579 layouts parse, every parts pane resolves,
    and the sample themes' patches all match. Other firmware versions haven't been tested.

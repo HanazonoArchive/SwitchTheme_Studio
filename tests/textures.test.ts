@@ -131,3 +131,36 @@ describe('animations and idle state', () => {
     expect(themeColor([0, 0, 0, 255], false)).toEqual([0, 0, 0, 255]);
   });
 });
+
+describe('console accuracy rules', () => {
+  it('reads the anchor byte the way nn::ui2d does', async () => {
+    const { realAnchors } = await import('../src/lib/layout/geometry');
+    // Injector/layout.json names: OriginX = bits 6-7 … ParentOriginY = bits 0-1.
+    expect(realAnchors({ originX: 2, originY: 1, parentOriginX: 2, parentOriginY: 1 })).toEqual({ originX: 1, originY: 2, parentX: 1, parentY: 2 });
+  });
+
+  it('pushes cancelling extreme scales into children', async () => {
+    const { flattenExtremeScales } = await import('../src/lib/layout/geometry');
+    const mk = (name: string, children: BflytPane[] = []): BflytPane => ({
+      kind: 'pan1', name, visible: true, alpha: 255, influenceAlpha: false, originX: 0, originY: 0, parentOriginX: 0, parentOriginY: 0,
+      position: { X: 0, Y: 0, Z: 0 }, rotation: { X: 0, Y: 0, Z: 0 }, scale: { X: 1, Y: 1 }, size: { X: 10, Y: 10 }, children,
+    });
+    const icon = mk('N_Icon_01');
+    icon.position = { X: 135, Y: 0, Z: 0 };
+    const game = mk('N_Game', [icon]);
+    game.scale = { X: 100000, Y: 1 };
+    const root = mk('N_GameRoot', [game]);
+    root.scale = { X: 1e-5, Y: 1 };
+    flattenExtremeScales(root);
+    expect(root.scale.X).toBe(1);
+    expect(game.scale.X).toBeCloseTo(1);
+    expect(icon.position.X).toBeCloseTo(135);
+  });
+
+  it('palette roles resolve per theme', async () => {
+    const { paletteColor } = await import('../src/lib/layout/palette');
+    expect(paletteColor(32, false)).toEqual([230, 0, 18, 255]);
+    expect(paletteColor(9, true)).toEqual([255, 255, 255, 255]);
+    expect(paletteColor(9999, false)).toBeUndefined();
+  });
+});

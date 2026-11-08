@@ -221,10 +221,12 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             {(
               [
-                ['Origin X', 'originX', ORIGIN_X],
-                ['Origin Y', 'originY', ORIGIN_Y],
-                ['Parent X', 'parentOriginX', ORIGIN_X],
-                ['Parent Y', 'parentOriginY', ORIGIN_Y],
+                // layout.json field names are swapped against what the console does with them
+                // (see realAnchors); label by effect.
+                ['Origin X', 'parentOriginY', ORIGIN_X],
+                ['Origin Y', 'parentOriginX', ORIGIN_Y],
+                ['Parent X', 'originY', ORIGIN_X],
+                ['Parent Y', 'originX', ORIGIN_Y],
               ] as const
             ).map(([label, field, names]) => (
               <label key={field} className="flex flex-col gap-1 text-slate-400">

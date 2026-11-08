@@ -1,7 +1,8 @@
 import React, { useMemo, useRef } from 'react';
 import type { BflytPane } from '../../lib/nx/bflyt';
 import type { LayoutPatch } from '../../lib/layout/patch';
-import { applyLayoutToBflyt, findFilePatch, findPanePatch, paneKey } from '../../lib/layout/patch';
+import { applyLayoutToBflyt, findPanePatch, paneKey } from '../../lib/layout/patch';
+import { fileLayers } from '../../lib/layout/paneModel';
 import { resolvePartLayout, type SystemLayout } from '../../lib/layout/systemLayouts';
 import type { MockSystemState } from '../../types/simulation';
 import { layoutColorToCss } from '../../lib/theme/stock';
@@ -83,7 +84,8 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
   // Apply patches per layout file once; parts reuse the patched tree of their file.
   const patchedTrees = useMemo(() => {
     const m = new Map<string, BflytPane | null>();
-    for (const [name, f] of system.layouts) m.set(name, applyLayoutToBflyt(f, findFilePatch(layout, name)));
+    // Same order as the installer: its firmware fixes, the theme, then fixes for known layouts.
+    for (const [name, f] of system.layouts) m.set(name, applyLayoutToBflyt(f, fileLayers(layout, system, name)));
     return m;
   }, [system, layout]);
 

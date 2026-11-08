@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Upload, Download, Eye, EyeOff, Plus, Trash2, Clock, Battery, Wifi, Cpu, Search, RotateCcw, AlertTriangle, ImageOff, Image as ImageIcon, Check } from 'lucide-react';
+import { Upload, Download, Eye, EyeOff, Plus, Trash2, Clock, Battery, Wifi, Cpu, Search, RotateCcw, AlertTriangle, ImageOff, Image as ImageIcon, Check, Wrench } from 'lucide-react';
 import type { RailTab } from './LeftRail';
 import type { ImageAdjustments, ScreenTarget, ThemeScreen } from '../../types/theme';
 import type { MockSystemState, MockGame } from '../../types/simulation';
@@ -7,6 +7,9 @@ import type { SystemLayout, SystemLayoutMap } from '../../lib/layout/systemLayou
 import { flattenPanes } from '../../lib/nx/bflyt';
 import { findImplicitZeroVectors, paneKey, splitPaneKey, type LayoutPatch, type PaneEdit, type PanePatch } from '../../lib/layout/patch';
 import { targetInfo } from '../../lib/layout/targets';
+import { fixesFor } from '../../lib/layout/paneModel';
+import { FW, stampFirmware, themeTargetFirmware } from '../../lib/layout/installerFixes';
+import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 
@@ -118,6 +121,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
   }, [system, currentFile, paneFilter]);
 
   const implicitZero = useMemo(() => findImplicitZeroVectors(layout), [layout]);
+  const installer = useMemo(() => fixesFor(layout, system), [layout, system]);
+  const compat = useMemo(() => (system ? checkCompatibility(layout, system) : []), [layout, system]);
 
   const handleAddGame = () => {
     const newGame: MockGame = {
@@ -339,6 +344,56 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
               )}
             </div>
 
+            {/* What the installer will do to this layout on the user's console */}
+            {system && (installer.before.length > 0 || installer.after.length > 0 || compat.length > 0) && (
+              <div className={`${card} space-y-2`}>
+                {(installer.before.length > 0 || installer.after.length > 0) && (
+                  <>
+                    <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                      <Wrench className="w-3.5 h-3.5 text-sky-400" /> Installer fixes on firmware {system.firmwareHint}
+                    </span>
+                    {[...installer.before, ...installer.after].map((f) => (
+                      <div key={f.name} className="text-[11px] text-slate-400 leading-snug">
+                        <span className="font-mono text-sky-300">{f.name}</span> {f.why}
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-slate-500">The preview already includes these.</p>
+                    {system.firmware >= FW.Fw20_0 && themeTargetFirmware(layout) < FW.Fw20_0 && (
+                      <button
+                        onClick={() => onUpdateActiveScreen({ layout: stampFirmware(layout, activeScreen.target, system.firmware) })}
+                        className="text-[11px] text-sky-300 hover:text-white underline underline-offset-2"
+                        title="Sets TargetFirmware so the installer stops adding the 19.x downgrade. Positions written for 11.x may need adjusting."
+                      >
+                        Target {system.firmwareHint} instead
+                      </button>
+                    )}
+                  </>
+                )}
+                {compat.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                      <AlertTriangle className={`w-3.5 h-3.5 ${compat.some((c) => c.severity === 'critical') ? 'text-red-400' : 'text-amber-400'}`} />
+                      Compatibility ({compat.length})
+                    </span>
+                    {compat.slice(0, 12).map((c, i) => (
+                      <div key={i} className={`text-[11px] leading-snug ${c.severity === 'critical' ? 'text-red-300' : 'text-slate-400'}`}>
+                        <span className="font-mono">{c.item}</span>{' '}
+                        {c.type === 'MissingFile'
+                          ? 'file not on this firmware'
+                          : c.type === 'MissingGroup'
+                            ? 'group missing'
+                            : c.type === 'MissingPane'
+                              ? 'pane missing'
+                              : c.info}
+                        {c.severity === 'critical' ? ` in ${c.file.replace('anim/', '')}: the installer drops this animation` : ''}
+                      </div>
+                    ))}
+                    {compat.length > 12 && <div className="text-[10px] text-slate-500">…and {compat.length - 12} more</div>}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Layout metadata */}
             <div className="space-y-2">
               <span className={label}>Layout</span>
@@ -349,7 +404,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 className="w-full bg-[#0c0e12] border border-[#232936] rounded px-2 py-1.5 text-white outline-none focus:border-[#10b981]"
               />
               {activeScreen.target === 'home' && (
-                <label className="flex items-center justify-between text-[11px] text-slate-300" title="11.0+ added the Nintendo Switch Online button. Unset/true removes it like pre-11.0 layouts.">
+                <label className="flex items-center justify-between text-[11px] text-slate-300" title="11.0+ added the Nintendo Switch Online button. On (or unset) makes the installer remove it and use the 19.x applet row.">
                   Hide Switch Online button
                   <input
                     type="checkbox"

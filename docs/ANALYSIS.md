@@ -49,6 +49,25 @@ Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/Swi
 - Undo/redo (one drag = one step), arrow-key nudging, full pane browser, live `layout.json` editor, export checks.
 - Tests: `npm test` (parsers, patch semantics, import/export of both demo packs).
 
+## Installer behaviour now simulated
+
+From a deep dive of SwitchLayoutEditor and the SwitchThemesCommon code it builds on:
+
+- **Firmware fixes.** On 20.0+ the installer stacks its own patches under older themes
+  (`20_DowngradeTo19`, `20_LegacyAppletButtons`, plus fixes for known layouts by ID or name). The
+  decision logic (`NewFirmFixes.cs`, `SzsPatcher.PatchLayouts`) and the fix files are ported, and the
+  preview applies them in the same order. The firmware is detected per `.szs` like `FirmwareDetection.cs`.
+- **Export targets your firmware.** Layouts started in the studio get `TargetFirmware` (and
+  `HideOnlineBtn: false` on Home) on the first edit, as the injector's LayoutDiff does. Imported themes
+  keep their value, with a one-click "Target 20.0+ instead".
+- **Compatibility checker** (`LayoutCompatibility.cs`). Patches for missing panes are skipped by the
+  installer. Animations that reference missing panes or groups are dropped, because they would crash
+  the console. Both are shown in the Panes tab and the export dialog.
+
+SwitchLayoutEditor itself only draws pane bounding boxes and doesn't render parts or textures, so it
+doesn't help with texture decoding. Worth borrowing later: LayoutDiff (import a layout edited in another
+tool from an edited `.szs`), and its BFLAN editor and templates for building animations.
+
 ## Known gaps / next steps
 
 1. **Textures.** Pictures are placeholders until BNTX (`timg/__Combined.bntx`) decoding lands: BC1/BC3/BC4/BC5

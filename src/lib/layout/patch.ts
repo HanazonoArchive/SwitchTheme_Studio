@@ -55,6 +55,8 @@ export interface LayoutPatch {
   ID?: string;
   HideOnlineBtn?: boolean;
   TargetFirmware?: number;
+  /** Obsolete pre-ID flag, still read by the installer to pick legacy fixes. */
+  Ready8X?: boolean;
   Files?: LayoutFilePatch[];
   Anims?: { FileName: string; AnimJson: string }[];
   [key: string]: unknown;
@@ -166,12 +168,16 @@ export function findPaneBfs(file: BflytFile, name: string): BflytPane | undefine
   return undefined;
 }
 
-/** Returns a deep copy of the layout with every matching patch applied to the pane tree. */
-export function applyLayoutToBflyt(file: BflytFile, filePatch: LayoutFilePatch | undefined): BflytPane | null {
+/**
+ * Returns a deep copy of the layout with patches applied to the pane tree, in order
+ * (installer fixes before the theme, the theme, fixes after), like SzsPatcher does.
+ */
+export function applyLayoutToBflyt(file: BflytFile, filePatches: LayoutFilePatch | undefined | (LayoutFilePatch | undefined)[]): BflytPane | null {
   if (!file.root) return null;
   const clone = (p: BflytPane): BflytPane => ({ ...p, children: p.children.map(clone) });
   const root = clone(file.root);
-  if (!filePatch?.Patches?.length) return root;
+  const layers = (Array.isArray(filePatches) ? filePatches : [filePatches]).filter((f): f is LayoutFilePatch => Boolean(f?.Patches?.length));
+  if (!layers.length) return root;
 
   const index = new Map<string, BflytPane>();
   const queue = [root];
@@ -181,7 +187,7 @@ export function applyLayoutToBflyt(file: BflytFile, filePatch: LayoutFilePatch |
     queue.push(...p.children);
   }
 
-  for (const patch of filePatch.Patches) {
+  for (const patch of layers.flatMap((l) => l.Patches!)) {
     const target = index.get(patch.PaneName);
     if (!target) continue;
     const next = applyPanePatch(stockState(target), patch);

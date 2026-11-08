@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Download, FileArchive, PackageCheck, AlertTriangle, XCircle } from 'lucide-react';
 import type { ThemeProject, ThemeScreen } from '../../types/theme';
+import type { SystemLayoutMap } from '../../lib/layout/systemLayouts';
 import { buildNxTheme, buildThemePack, checkScreen, downloadBlob, safeFileName } from '../../lib/theme/nxtheme';
 
 interface ExportModalProps {
@@ -8,16 +9,17 @@ interface ExportModalProps {
   onClose: () => void;
   project: ThemeProject;
   activeScreen: ThemeScreen;
+  systemLayouts: SystemLayoutMap;
 }
 
-export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project, activeScreen }) => {
+export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project, activeScreen, systemLayouts }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const checks = useMemo(() => project.screens.map((s) => ({ screen: s, issues: checkScreen(s) })), [project]);
+  const checks = useMemo(() => project.screens.map((s) => ({ screen: s, issues: checkScreen(s, systemLayouts[s.target]) })), [project, systemLayouts]);
 
   if (!isOpen) return null;
 
-  const activeBlocked = checkScreen(activeScreen).some((c) => c.level === 'error');
+  const activeBlocked = checkScreen(activeScreen, systemLayouts[activeScreen.target]).some((c) => c.level === 'error');
   const exportable = checks.filter((c) => !c.issues.some((i) => i.level === 'error')).length;
 
   const run = async (fn: () => Promise<void>) => {
@@ -77,7 +79,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
           <button
             disabled={isExporting || exportable === 0}
-            onClick={() => run(async () => downloadBlob(await buildThemePack(project), `${safeFileName(project.name)}.zip`))}
+            onClick={() => run(async () => downloadBlob(await buildThemePack(project, systemLayouts), `${safeFileName(project.name)}.zip`))}
             className="w-full text-left p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[#202532]"
           >
             <div className="flex items-center gap-3">

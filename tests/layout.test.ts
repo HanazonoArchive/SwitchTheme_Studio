@@ -89,7 +89,7 @@ describe('system layouts', () => {
     const sys = parseSystemSzs('ResidentMenu.szs', szs);
     expect(sys.target).toBe('home');
     expect(sys.mainLayout).toBe('blyt/RdtBase.bflyt');
-    expect(sys.firmwareHint).toBe('11.0 – 19.x');
+    expect(sys.firmware).toBe(1100);
     expect(resolvePartLayout(sys, sys.layouts.get('blyt/RdtBase.bflyt')!.byName.get('L_Hud')!)).toBe('blyt/Hud.bflyt');
   });
 

@@ -2,6 +2,7 @@ import type { ScreenTarget } from '../../types/theme';
 import { parseSarc } from '../nx/sarc';
 import { parseBflyt, type BflytFile } from '../nx/bflyt';
 import { targetFromSzsName, targetInfo } from './targets';
+import { detectFirmware, firmwareLabel } from './installerFixes';
 
 /**
  * Stock layouts come from the user's own console: NXThemes Installer's "Extract home menu"
@@ -15,22 +16,15 @@ export interface SystemLayout {
   layouts: Map<string, BflytFile>;
   /** Layout used as the preview root. */
   mainLayout: string;
-  /** Firmware guess based on file markers (same idea as FirmwareDetection.cs). */
+  /** ConsoleFirmware value the installer detects for this file (FirmwareDetection.cs); 0 = unknown. */
+  firmware: number;
   firmwareHint: string;
+  /** Every file in the archive (animations included), for compatibility checks. */
+  fileNames: Set<string>;
   loadedAt: number;
 }
 
 export type SystemLayoutMap = Partial<Record<ScreenTarget, SystemLayout>>;
-
-function guessFirmware(target: ScreenTarget, files: Set<string>) {
-  if (target === 'home') {
-    if (files.has('blyt/RdtBtnSplay.bflyt')) return '20.0+';
-    if (files.has('blyt/RdtBtnLR.bflyt')) return '11.0 – 19.x';
-    if (files.has('anim/RdtBtnShop_LimitB.bflan')) return '8.0 – 10.x';
-    return 'older than 8.0';
-  }
-  return 'unknown';
-}
 
 /** Picks the layout to preview: the configured one if present, otherwise the largest layout no other layout uses as a part. */
 function pickMainLayout(preferred: string, layouts: Map<string, BflytFile>) {
@@ -78,7 +72,9 @@ export function parseSystemSzs(fileName: string, bytes: Uint8Array, forcedTarget
     szsName: info.szs,
     layouts,
     mainLayout: pickMainLayout(info.mainLayout, layouts),
-    firmwareHint: guessFirmware(target, new Set(files.keys())),
+    firmware: detectFirmware(target, new Set(files.keys())),
+    firmwareHint: firmwareLabel(detectFirmware(target, new Set(files.keys()))),
+    fileNames: new Set(files.keys()),
     loadedAt: Date.now(),
   };
 }

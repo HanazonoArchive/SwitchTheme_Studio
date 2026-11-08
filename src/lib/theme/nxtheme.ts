@@ -4,6 +4,8 @@ import { NO_ADJUSTMENTS } from '../../types/theme';
 import { hasLayoutChanges, type LayoutPatch } from '../layout/patch';
 import { normaliseTarget, TARGET_ORDER, targetInfo } from '../layout/targets';
 import { parseSarc } from '../nx/sarc';
+import { checkCompatibility } from '../layout/compatibility';
+import type { SystemLayout, SystemLayoutMap } from '../layout/systemLayouts';
 import { exportWallpaper, loadWallpaper } from './images';
 
 /** info.json format version written by current injector/installer (CommonInfo.NxThemeFormatVersion). */
@@ -124,8 +126,12 @@ export interface ExportCheck {
   message: string;
 }
 
-export function checkScreen(screen: ThemeScreen): ExportCheck[] {
+export function checkScreen(screen: ThemeScreen, sys?: SystemLayout): ExportCheck[] {
   const out: ExportCheck[] = [];
+  if (sys) {
+    const dropped = new Set(checkCompatibility(screen.layout, sys).filter((c) => c.severity === 'critical').map((c) => c.file));
+    for (const anim of dropped) out.push({ level: 'warning', message: `${screen.name}: ${anim} targets panes or groups missing on firmware ${sys.firmwareHint}; the installer will drop it.` });
+  }
   const layoutChanged = hasLayoutChanges(screen.layout);
   if (!screen.wallpaper && !layoutChanged && !screen.extraFiles.length && !hasLayoutChanges(screen.common ?? undefined)) {
     out.push({ level: 'error', message: `${screen.name} has no background and no layout changes, so the installer has nothing to install.` });
@@ -186,11 +192,11 @@ export function safeFileName(s: string) {
   return s.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'theme';
 }
 
-export async function buildThemePack(project: ThemeProject): Promise<Blob> {
+export async function buildThemePack(project: ThemeProject, systemLayouts: SystemLayoutMap = {}): Promise<Blob> {
   const pack = new JSZip();
   const folder = pack.folder(safeFileName(project.name))!;
   for (const screen of project.screens) {
-    if (checkScreen(screen).some((c) => c.level === 'error')) continue;
+    if (checkScreen(screen, systemLayouts[screen.target]).some((c) => c.level === 'error')) continue;
     folder.file(`${safeFileName(project.name)} (${screen.name}).nxtheme`, await buildNxTheme(project, screen));
   }
   folder.file(

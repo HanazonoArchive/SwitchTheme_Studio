@@ -162,6 +162,14 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
             </span>
           </div>
         )}
+        {info.fixes.length > 0 && (
+          <div className="flex gap-2 p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-200 text-[11px] leading-relaxed">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              The installer also changes this pane on your firmware ({info.fixes.map((f) => f.name).join(', ')}). Stock values and the preview include it.
+            </span>
+          </div>
+        )}
         {info.missingInStock && (
           <div className="flex gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-[11px] leading-relaxed">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />

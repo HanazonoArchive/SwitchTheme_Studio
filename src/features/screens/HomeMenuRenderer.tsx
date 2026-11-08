@@ -1,50 +1,74 @@
 import React from 'react';
 import { ShoppingBag, Newspaper, Image as GalleryIcon, Settings, Power, Tv } from 'lucide-react';
 import type { MockSystemState } from '../../types/simulation';
-import type { ThemeScreen, PaneNode } from '../../types/theme';
+import { findPanePatch, paneKey, v2, v3, type LayoutPatch } from '../../lib/layout/patch';
 
+/**
+ * APPROXIMATE home menu used when the console's ResidentMenu.szs isn't loaded.
+ * Real layouts are a tree of panes whose stock values live in that file, so without it this
+ * can only place a hand-drawn mock using the few values a patch sets directly.
+ * Patch values are read with the injector's rules (a vector replaces the whole stock vector).
+ */
 interface HomeMenuRendererProps {
-  activeScreen: ThemeScreen;
+  layout: LayoutPatch;
+  hideOnlineBtn: boolean;
   mockState: MockSystemState;
-  selectedPaneId: string | null;
-  onSelectPane: (paneId: string | null) => void;
+  interactive: boolean;
+  selectedKey: string | null;
+  onSelect: (key: string | null) => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
 }
 
+const BASE = 'blyt/RdtBase.bflyt';
+const ICON = 'blyt/RdtBtnIconGame.bflyt';
+
 export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
-  activeScreen,
+  layout,
+  hideOnlineBtn,
   mockState,
-  selectedPaneId,
-  onSelectPane,
+  interactive,
+  selectedKey,
+  onSelect,
   onUpdateMockState,
 }) => {
   const selectedIndex = mockState.selectedGameIndex;
   const selectedGame = mockState.games[selectedIndex] || mockState.games[0];
   const activeUser = mockState.users[0] || { id: 'u1', name: 'User', avatarBg: '#e11d48', avatarIcon: '🍄' };
   const isDark = mockState.isDarkTheme;
+  const selectedPaneId = interactive ? selectedKey : null;
+  const onSelectPane = (key: string | null) => {
+    if (interactive) onSelect(key);
+  };
 
-  // Extract pane properties with fallbacks matching Vertical-OEM
-  const getPane = (name: string, fallback: Partial<PaneNode> = {}) => {
-    const p = activeScreen.panes.find((item) => item.name === name);
+  // Mock placement: patch value when the theme sets it, otherwise a hand-tuned guess.
+  const getPane = (
+    file: string,
+    name: string,
+    fallback: { x?: number; y?: number; width?: number; height?: number; scaleX?: number; scaleY?: number },
+  ) => {
+    const p = findPanePatch(layout, file, name);
+    const pos = p?.Position ? v3(p.Position) : null;
+    const size = p?.Size ? v2(p.Size) : null;
+    const scale = p?.Scale ? v2(p.Scale) : null;
     return {
-      id: p?.id || `pane-${name}`,
+      id: paneKey(file, name),
       name,
-      x: p?.x ?? fallback.x ?? 0,
-      y: p?.y ?? fallback.y ?? 0,
-      width: p?.width ?? fallback.width ?? 100,
-      height: p?.height ?? fallback.height ?? 100,
-      scaleX: p?.scaleX ?? fallback.scaleX ?? 1,
-      scaleY: p?.scaleY ?? fallback.scaleY ?? 1,
-      visible: p?.visible ?? fallback.visible ?? true,
+      x: pos ? pos.X : fallback.x ?? 0,
+      y: pos ? pos.Y : fallback.y ?? 0,
+      width: size ? size.X : fallback.width ?? 100,
+      height: size ? size.Y : fallback.height ?? 100,
+      scaleX: scale ? scale.X : fallback.scaleX ?? 1,
+      scaleY: scale ? scale.Y : fallback.scaleY ?? 1,
+      visible: p?.Visible ?? true,
     };
   };
 
-  const myPage = getPane('N_MyPage', { x: -313, y: 300, scaleX: 0.9, scaleY: 0.9 });
-  const hud = getPane('L_Hud', { x: 584, y: 300, scaleX: 1, scaleY: 1 });
-  const systemApplets = getPane('N_System', { x: 0, y: -219, scaleX: 0.7, scaleY: 0.7 });
-  const iconGame = getPane('P_IconGame', { width: 256, height: 384, scaleX: 1, scaleY: 1 });
-  const tip = getPane('N_Tip', { x: 0, y: 222, scaleX: 0.9, scaleY: 0.9 });
-  const footer = getPane('L_BtnFooter', { x: 0, y: -300, scaleX: 1, scaleY: 1 });
+  const myPage = getPane(BASE, 'N_MyPage', { x: -560, y: 300, scaleX: 1, scaleY: 1 });
+  const hud = getPane(BASE, 'L_Hud', { x: 584, y: 300, scaleX: 1, scaleY: 1 });
+  const systemApplets = getPane(BASE, 'N_System', { x: 0, y: -180, scaleX: 1, scaleY: 1 });
+  const iconGame = getPane(ICON, 'P_IconGame', { width: 256, height: 256, scaleX: 1, scaleY: 1 });
+  const tip = getPane(ICON, 'N_Tip', { x: 0, y: 170, scaleX: 1, scaleY: 1 });
+  const footer = { id: 'mock-footer', visible: true, y: -300, scaleX: 1, scaleY: 1 };
 
   // Dimensions
   const cardWidth = iconGame.width || 256;
@@ -62,7 +86,7 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
 
   // 7 Official Nintendo Switch System Applets
   const appletButtons = [
-    ...(activeScreen.hideOnlineBtn
+    ...(hideOnlineBtn
       ? []
       : [
           {
@@ -424,11 +448,11 @@ export const HomeMenuRenderer: React.FC<HomeMenuRendererProps> = ({
       {footer.visible && (
         <div
           onClick={(e) => {
+            // Footer lives in common.szs (FooterAll.bflyt); not editable in the mock.
             e.stopPropagation();
-            onSelectPane(footer.id);
           }}
           className={`absolute flex items-center justify-between cursor-pointer px-12 transition ${
-            selectedPaneId === footer.id ? 'ring-2 ring-[#10b981]' : ''
+            ''
           }`}
           style={{
             left: 0,

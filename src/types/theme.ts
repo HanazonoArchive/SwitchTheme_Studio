@@ -1,57 +1,61 @@
-export type ScreenTarget = 'home' | 'lock' | 'apps' | 'user' | 'set' | 'news';
+import type { LayoutPatch } from '../lib/layout/patch';
 
-export interface PaneNode {
-  id: string;
-  name: string;
-  type: 'picture' | 'text' | 'group' | 'window' | 'parts';
-  x: number;
-  y: number;
-  z?: number;
+/** Theme parts, matching CommonInfo.Parts in SwitchThemesCommon. */
+export type ScreenTarget = 'home' | 'lock' | 'apps' | 'set' | 'news' | 'user' | 'psl';
+
+export type WallpaperFormat = 'jpg' | 'dds' | 'png' | 'webp' | 'other';
+
+export interface Wallpaper {
+  /** Original bytes as imported (exported untouched when already valid and unadjusted). */
+  blob: Blob;
+  fileName: string;
+  format: WallpaperFormat;
   width: number;
   height: number;
-  scaleX: number;
-  scaleY: number;
-  visible: boolean;
-  colorTL?: string;
-  colorTR?: string;
-  colorBL?: string;
-  colorBR?: string;
+  /** jpg only: progressive JPEGs are rejected by the installer. */
+  progressive?: boolean;
+  /** dds only: FourCC, only DXT1 is accepted for backgrounds. */
+  ddsEncoding?: string;
+  /** Something the browser can display (DDS is decoded to PNG for preview). */
+  displayUrl: string;
+}
+
+export interface ImageAdjustments {
+  brightness: number;
+  contrast: number;
+  dim: number;
 }
 
 export interface ThemeScreen {
   id: string;
-  name: string;
   target: ScreenTarget;
-  szsFileName: string;
-  bflytName: string;
+  name: string;
 
-  // Background layer (Layer 1 in SwitchThemesNX)
-  wallpaperUrl: string | null; // null if Layout-Only (uses stock Switch background)
-  wallpaperFileName: string;
-  previewUrl: string | null;   // Reference screenshot preview if available
-  brightness: number;
-  contrast: number;
-  dimOverlay: number;
+  /**
+   * Layer 1. null means the theme ships no image, so the console keeps its own
+   * Basic Black / Basic White background ("layout-only" theme).
+   */
+  wallpaper: Wallpaper | null;
+  adjustments: ImageAdjustments;
 
-  // Layout layer (Layer 2 in SwitchThemesNX)
-  layoutPatchName: string;     // e.g. "Vertical-OEM (Home Menu)", "Default by Nintendo", "FairTech Animated"
-  layoutAuthor: string;        // e.g. "autoDiff", "Nintendo", "FairTech"
-  isCustomLayout: boolean;     // true if layout has patches, false if stock Nintendo
-  isVerticalIcons: boolean;    // true if P_IconGame is portrait (256x384)
-  hideOnlineBtn: boolean;      // true if HideOnlineBtn is set
-
-  layoutJson: Record<string, any>;
-  infoJson?: Record<string, any>;
-  panes: PaneNode[];
+  /** Layer 2: layout.json. An empty object means "stock layout". */
+  layout: LayoutPatch;
+  /** common.json (patches common.szs, home/user/psl only). Kept as-is. */
+  common: LayoutPatch | null;
+  /** Any other files from the .nxtheme (custom applet icons etc.), passed through on export. */
+  extraFiles: { name: string; blob: Blob }[];
+  /** Original info.json, kept for fields we don't edit. */
+  info: Record<string, unknown>;
 }
 
 export interface ThemeProject {
   id: string;
   name: string;
   author: string;
-  version: string;
-  layoutInfo?: string;
-  themeType?: 'layout_only' | 'wallpaper_only' | 'full';
   screens: ThemeScreen[];
   activeScreenId: string;
 }
+
+export const NO_ADJUSTMENTS: ImageAdjustments = { brightness: 1, contrast: 1, dim: 0 };
+
+export const hasAdjustments = (a: ImageAdjustments) => a.brightness !== 1 || a.contrast !== 1 || a.dim !== 0;

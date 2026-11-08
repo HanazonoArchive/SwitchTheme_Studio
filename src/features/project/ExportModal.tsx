@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { X, Download, FileArchive, PackageCheck } from 'lucide-react';
-import JSZip from 'jszip';
+import React, { useMemo, useState } from 'react';
+import { X, Download, FileArchive, PackageCheck, AlertTriangle, XCircle } from 'lucide-react';
 import type { ThemeProject, ThemeScreen } from '../../types/theme';
+import { buildNxTheme, buildThemePack, checkScreen, downloadBlob, safeFileName } from '../../lib/theme/nxtheme';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -10,91 +10,25 @@ interface ExportModalProps {
   activeScreen: ThemeScreen;
 }
 
-export const ExportModal: React.FC<ExportModalProps> = ({
-  isOpen,
-  onClose,
-  project,
-  activeScreen,
-}) => {
+export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project, activeScreen }) => {
   const [isExporting, setIsExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const checks = useMemo(() => project.screens.map((s) => ({ screen: s, issues: checkScreen(s) })), [project]);
 
   if (!isOpen) return null;
 
-  const buildSingleZip = async (screen: ThemeScreen): Promise<Blob> => {
-    const zip = new JSZip();
+  const activeBlocked = checkScreen(activeScreen).some((c) => c.level === 'error');
+  const exportable = checks.filter((c) => !c.issues.some((i) => i.level === 'error')).length;
 
-    const infoJson = {
-      Version: 17,
-      ThemeName: project.name,
-      Author: project.author,
-      Target: screen.target,
-      LayoutInfo: screen.name,
-    };
-    zip.file('info.json', JSON.stringify(infoJson, null, 2));
-
-    zip.file('layout.json', JSON.stringify(screen.layoutJson, null, 2));
-
-    if (screen.wallpaperUrl) {
-      try {
-        const res = await fetch(screen.wallpaperUrl);
-        const blob = await res.blob();
-        zip.file(screen.wallpaperFileName || 'preview.jpg', blob);
-      } catch (e) {
-        console.warn('Could not bundle wallpaper blob', e);
-      }
-    }
-
-    return await zip.generateAsync({ type: 'blob' });
-  };
-
-  const handleExportSingle = async () => {
+  const run = async (fn: () => Promise<void>) => {
     setIsExporting(true);
+    setError(null);
     try {
-      const blob = await buildSingleZip(activeScreen);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project.name}_${activeScreen.target}.nxtheme`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await fn();
       onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleExportPack = async () => {
-    setIsExporting(true);
-    try {
-      const packZip = new JSZip();
-      const folder = packZip.folder(project.name) || packZip;
-
-      for (const screen of project.screens) {
-        const nxBlob = await buildSingleZip(screen);
-        folder.file(`${screen.target}.nxtheme`, nxBlob);
-      }
-
-      folder.file(
-        'README.txt',
-        `Theme: ${project.name}\nAuthor: ${project.author}\n\nInstall:\nCopy .nxtheme files to /themes/${project.name}/ on your Switch SD Card.\nInstall via NXThemesInstaller.`
-      );
-
-      const blob = await packZip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project.name}_Pack.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      onClose();
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
+      setError((e as Error).message);
     } finally {
       setIsExporting(false);
     }
@@ -111,45 +45,60 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         <div className="p-5 space-y-3">
-          <div
-            onClick={!isExporting ? handleExportSingle : undefined}
-            className="p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] cursor-pointer transition flex items-center justify-between"
+          {checks.some((c) => c.issues.length) && (
+            <div className="space-y-1.5">
+              {checks.flatMap(({ screen, issues }) =>
+                issues.map((i) => (
+                  <div key={screen.id + i.message} className={`flex gap-1.5 text-[11px] ${i.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
+                    {i.level === 'error' ? <XCircle className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
+                    <span>{i.message}</span>
+                  </div>
+                )),
+              )}
+            </div>
+          )}
+
+          <button
+            disabled={isExporting || activeBlocked}
+            onClick={() =>
+              run(async () => downloadBlob(await buildNxTheme(project, activeScreen), `${safeFileName(project.name)} (${activeScreen.name}).nxtheme`))
+            }
+            className="w-full text-left p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[#202532]"
           >
             <div className="flex items-center gap-3">
               <FileArchive className="w-6 h-6 text-[#10b981]" />
               <div>
                 <p className="font-medium text-white text-xs">{activeScreen.name} (.nxtheme)</p>
-                <p className="text-[11px] text-slate-500">Export active screen only</p>
+                <p className="text-[11px] text-slate-500">Active screen only</p>
               </div>
             </div>
             <Download className="w-4 h-4 text-slate-400" />
-          </div>
+          </button>
 
-          <div
-            onClick={!isExporting ? handleExportPack : undefined}
-            className="p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] cursor-pointer transition flex items-center justify-between"
+          <button
+            disabled={isExporting || exportable === 0}
+            onClick={() => run(async () => downloadBlob(await buildThemePack(project), `${safeFileName(project.name)}.zip`))}
+            className="w-full text-left p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[#202532]"
           >
             <div className="flex items-center gap-3">
               <PackageCheck className="w-6 h-6 text-emerald-400" />
               <div>
-                <p className="font-medium text-white text-xs">Full Theme Pack (ZIP)</p>
-                <p className="text-[11px] text-slate-500">All {project.screens.length} screens bundled for SD card</p>
+                <p className="font-medium text-white text-xs">Full theme pack (.zip)</p>
+                <p className="text-[11px] text-slate-500">
+                  {exportable} of {project.screens.length} screens, ready for sd:/themes/
+                </p>
               </div>
             </div>
             <Download className="w-4 h-4 text-slate-400" />
-          </div>
-        </div>
-
-        <div className="h-12 px-5 border-t border-[#1b1f28] flex items-center justify-end bg-[#0c0e12]">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 rounded hover:bg-[#161a22] text-slate-400 transition"
-          >
-            Cancel
           </button>
+
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Backgrounds are written as a baseline 1280×720 image.jpg with your adjustments applied. Untouched valid images and DXT1 .dds files are copied as-is.
+          </p>
+          {error && <div className="p-2 rounded bg-red-950/40 border border-red-500/40 text-red-300 text-[11px]">{error}</div>}
+          {isExporting && <div className="text-[11px] text-slate-400">Building…</div>}
         </div>
       </div>
     </div>
   );
 };
-

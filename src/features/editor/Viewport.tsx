@@ -1,6 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { PenTool, MonitorPlay, Sparkles } from 'lucide-react';
 import type { ThemeScreen } from '../../types/theme';
+import type { SystemLayout } from '../../lib/layout/systemLayouts';
+import { targetInfo } from '../../lib/layout/targets';
+import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
+import { ExactLayoutRenderer } from '../screens/ExactLayoutRenderer';
+import { STOCK_BG } from '../../lib/theme/stock';
 import type { MockSystemState } from '../../types/simulation';
 import { ViewportControls } from './ViewportControls';
 import { HomeMenuRenderer } from '../screens/HomeMenuRenderer';
@@ -9,25 +14,32 @@ import { AllAppsRenderer } from '../screens/AllAppsRenderer';
 
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
+  system: SystemLayout | undefined;
   mockState: MockSystemState;
   activeTopTab: 'editor' | 'motion';
-  selectedPaneId: string | null;
-  onSelectPane: (paneId: string | null) => void;
+  selectedKey: string | null;
+  onSelect: (key: string | null) => void;
+  onDragPane: (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
-  onDropWallpaper: (file: File) => void;
+  onDropFile: (file: File) => void;
   onOpenProjectModal: () => void;
+  onOpenPanes: () => void;
 }
 
 export const Viewport: React.FC<ViewportProps> = ({
   activeScreen,
+  system,
   mockState,
   activeTopTab,
-  selectedPaneId,
-  onSelectPane,
+  selectedKey,
+  onSelect,
+  onDragPane,
   onUpdateMockState,
-  onDropWallpaper,
+  onDropFile,
   onOpenProjectModal,
+  onOpenPanes,
 }) => {
+  const wallpaperUrl = useWallpaperPreview(activeScreen?.wallpaper ?? null, activeScreen?.adjustments ?? { brightness: 1, contrast: 1, dim: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 1280, height: 720 });
 
@@ -61,7 +73,7 @@ export const Viewport: React.FC<ViewportProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files?.[0]) {
-      onDropWallpaper(e.dataTransfer.files[0]);
+      onDropFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -147,10 +159,9 @@ export const Viewport: React.FC<ViewportProps> = ({
   }
 
   const isEditorMode = activeTopTab === 'editor';
-  // In Theme Editor, show pre-rendered preview if available, or custom wallpaper
-  const displayImage = activeScreen.wallpaperUrl || (isEditorMode ? activeScreen.previewUrl : null);
+  const exact = Boolean(system);
 
-  // Dynamic 16:9 scale with comfortable initial fit (85% factor with generous padding)
+  // Dynamic 16:9 scale with comfortable initial fit
   const paddingX = 80;
   const paddingY = 60;
   const availableWidth = Math.max(320, containerSize.width - paddingX);
@@ -164,24 +175,34 @@ export const Viewport: React.FC<ViewportProps> = ({
 
   return (
     <section className="flex-1 bg-[#090b0e] flex flex-col min-w-0 overflow-hidden select-none">
-      {/* Viewer Header without the green semi-transparent tag */}
       <div className="h-8 px-4 border-b border-[#1b1f28] flex items-center justify-between bg-[#0c0e12]">
         <div className="flex items-center gap-2">
-          {isEditorMode ? (
-            <PenTool className="w-3 h-3 text-[#10b981]" />
-          ) : (
-            <MonitorPlay className="w-3 h-3 text-blue-400" />
-          )}
+          {isEditorMode ? <PenTool className="w-3 h-3 text-[#10b981]" /> : <MonitorPlay className="w-3 h-3 text-blue-400" />}
           <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
             {isEditorMode ? 'Theme Editor' : 'Live Simulator'}
           </span>
           <span className="text-slate-600">/</span>
           <span className="text-[11px] text-slate-300 font-medium">{activeScreen.name}</span>
+          <span className="text-slate-600">/</span>
+          <span className="text-[11px] text-slate-400">{activeScreen.wallpaper ? 'Custom background' : 'Stock background'}</span>
         </div>
-        <span className="text-[10px] font-mono text-slate-500">{activeScreen.szsFileName}</span>
+        <div className="flex items-center gap-2">
+          {exact ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#10b981]/15 text-[#10b981] font-medium" title={`Rendering ${system!.mainLayout} from your ${system!.szsName} (firmware ${system!.firmwareHint})`}>
+              Exact layout · {system!.szsName}
+            </span>
+          ) : (
+            <button
+              onClick={onOpenPanes}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium hover:bg-amber-500/25"
+              title="Positions are a hand-made mock. Load your console's layout file for an exact preview."
+            >
+              Approximate · load {targetInfo(activeScreen.target).szs} for exact
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Canvas Area with Left-Click Drag Pan and Wheel Zoom */}
       <div
         ref={containerRef}
         onWheel={handleWheel}
@@ -194,123 +215,66 @@ export const Viewport: React.FC<ViewportProps> = ({
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onClick={() => {
-          if (!hasMovedRef.current) onSelectPane(null);
+          if (!hasMovedRef.current) onSelect(null);
         }}
         className="flex-1 relative overflow-hidden flex items-center justify-center p-6 bg-[#090b0e]"
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
         <div
-          className="relative rounded overflow-hidden shadow-2xl border border-[#1e232e] bg-black shrink-0 transition-transform duration-75 select-none"
+          className="relative rounded overflow-hidden shadow-2xl border border-[#1e232e] bg-black shrink-0 select-none"
           style={{
             width: `${canvasWidth}px`,
             height: `${canvasHeight}px`,
             transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
           }}
         >
-          {/* Internal 1280x720 Native Switch Display */}
+          {/* Native 1280x720 Switch display. Editor and simulator render the SAME layers;
+              the editor only adds selection outlines and drag handles. */}
           <div
             className="absolute top-0 left-0 overflow-hidden"
-            style={{
-              width: '1280px',
-              height: '720px',
-              transform: `scale(${finalScale})`,
-              transformOrigin: 'top left',
-            }}
+            style={{ width: '1280px', height: '720px', transform: `scale(${finalScale})`, transformOrigin: 'top left' }}
           >
-            {/* Layer 1: Background (Custom Wallpaper OR Theme Preview OR Authentic Switch Stock Background) */}
-            {displayImage ? (
-              <img
-                src={displayImage}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                style={{
-                  filter: `brightness(${activeScreen.brightness}) contrast(${activeScreen.contrast})`,
-                }}
+            {/* Layer 1: background. A theme without image.jpg keeps the console's own background. */}
+            {wallpaperUrl ? (
+              <img src={wallpaperUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" />
+            ) : (
+              <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }} />
+            )}
+
+            {/* Layer 2: UI */}
+            {exact ? (
+              <ExactLayoutRenderer
+                system={system!}
+                layout={activeScreen.layout}
+                mockState={mockState}
+                interactive={isEditorMode}
+                selectedKey={selectedKey}
+                showAllOutlines={isEditorMode && mockState.wireframeMode}
+                viewScale={finalScale}
+                onSelect={onSelect}
+                onDragPane={onDragPane}
               />
             ) : (
-              /* Authentic Nintendo Switch Stock Background: Dark (#2d2d2d) or Light (#ebebeb) */
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  backgroundColor: mockState.isDarkTheme ? '#2d2d2d' : '#ebebeb',
-                  backgroundImage: mockState.isDarkTheme
-                    ? 'radial-gradient(circle at 50% 50%, #323232 0%, #242424 100%)'
-                    : 'radial-gradient(circle at 50% 50%, #f5f5f5 0%, #dfdfdf 100%)',
-                }}
-              />
-            )}
-
-            {/* Layer 2: Dim Overlay */}
-            {activeScreen.dimOverlay > 0 && (
-              <div
-                className="absolute inset-0 bg-black pointer-events-none"
-                style={{ opacity: activeScreen.dimOverlay }}
-              />
-            )}
-
-            {/* Layer 3: Interactive Simulation Overlay */}
-            {/* Active in Live Simulator OR when editing without a pre-rendered screenshot */}
-            {(!isEditorMode || (!activeScreen.wallpaperUrl && !activeScreen.previewUrl)) && (
               <>
                 {activeScreen.target === 'home' && (
                   <HomeMenuRenderer
-                    activeScreen={activeScreen}
+                    layout={activeScreen.layout}
+                    hideOnlineBtn={activeScreen.layout.HideOnlineBtn ?? true}
                     mockState={mockState}
-                    selectedPaneId={selectedPaneId}
-                    onSelectPane={onSelectPane}
+                    interactive={isEditorMode}
+                    selectedKey={selectedKey}
+                    onSelect={onSelect}
                     onUpdateMockState={onUpdateMockState}
                   />
                 )}
-
-                {activeScreen.target === 'lock' && (
-                  <LockscreenRenderer mockState={mockState} />
-                )}
-
-                {activeScreen.target === 'apps' && (
-                  <AllAppsRenderer mockState={mockState} />
+                {activeScreen.target === 'lock' && <LockscreenRenderer mockState={mockState} />}
+                {activeScreen.target === 'apps' && <AllAppsRenderer mockState={mockState} />}
+                {!['home', 'lock', 'apps'].includes(activeScreen.target) && (
+                  <div className="absolute inset-0 flex items-center justify-center text-white/60 text-lg">
+                    Load {targetInfo(activeScreen.target).szs} to preview this screen's layout
+                  </div>
                 )}
               </>
-            )}
-
-            {/* Layer 4: BFLYT Wireframe Overlay (ONLY when user explicitly toggles wireframeMode) */}
-            {mockState.wireframeMode && (
-              <div className="absolute inset-0 pointer-events-none z-30">
-                {activeScreen.panes.map((pane) => {
-                  const isSelected = selectedPaneId === pane.id;
-                  const isCentered = pane.x < 640 && pane.x > -640 && pane.y < 360 && pane.y > -360;
-                  const left = isCentered && (pane.x < 0 || pane.y > 0) ? 640 + pane.x : pane.x;
-                  const top = isCentered && (pane.x < 0 || pane.y > 0) ? 360 - pane.y : pane.y;
-
-                  if (!pane.visible && !isSelected) return null;
-
-                  return (
-                    <div
-                      key={pane.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectPane(pane.id);
-                      }}
-                      className={`absolute pointer-events-auto cursor-pointer transition ${
-                        isSelected
-                          ? 'border-2 border-[#10b981] bg-[#10b981]/20 ring-2 ring-[#10b981]/40'
-                          : 'border border-amber-400/50 hover:border-amber-300 bg-amber-400/10'
-                      }`}
-                      style={{
-                        left: `${left}px`,
-                        top: `${top}px`,
-                        width: `${pane.width}px`,
-                        height: `${pane.height}px`,
-                        transform: `scale(${pane.scaleX}, ${pane.scaleY})`,
-                        transformOrigin: 'top left',
-                      }}
-                    >
-                      <span className="absolute top-1 left-1 font-mono text-[9px] px-1.5 py-0.5 bg-black/90 text-amber-300 border border-amber-400/40 rounded shadow">
-                        {pane.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
             )}
           </div>
         </div>

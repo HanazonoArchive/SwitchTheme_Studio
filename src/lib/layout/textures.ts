@@ -1,5 +1,6 @@
 import { decodeTexture, type BntxTexture, type ImageDataLike } from '../nx/bntx';
 import type { BflytMaterial, BflytPane } from '../nx/bflyt';
+import { paletteColor } from './palette';
 
 /**
  * Turns a picture pane's material + texture into something CSS can draw, the way nn::ui2d does:
@@ -34,7 +35,7 @@ export function themeColor(c: Rgba, dark: boolean): Rgba {
   return c;
 }
 
-const toCss = (c: Rgba) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${(c[3] / 255).toFixed(3)})`;
+export const toCss = (c: Rgba) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${(c[3] / 255).toFixed(3)})`;
 
 function averageVertexColor(p: BflytPane): Rgba {
   if (!p.colors) return [255, 255, 255, 255];
@@ -69,8 +70,13 @@ export function paneVisual(
 ): PaneVisual | null {
   if (!material) return null;
   const vertex = averageVertexColor(pane);
-  const black = themeColor(parseLayoutColor(material.black), dark);
-  const white = themeColor(parseLayoutColor(material.white), dark);
+  // System palette (C_W / C_B user data) wins; otherwise the material colours, recoloured for the theme.
+  const cw = paletteColor(pane.userData?.C_W?.[0], dark);
+  const cb = paletteColor(pane.userData?.C_B?.[0], dark);
+  const matWhite = parseLayoutColor(material.white);
+  const black = cb ?? themeColor(parseLayoutColor(material.black), dark);
+  // Keep the material's alpha (animations fade panes through it).
+  const white: Rgba = cw ? [cw[0], cw[1], cw[2], Math.min(cw[3], matWhite[3])] : themeColor(matWhite, dark);
   const mul = (c: Rgba): Rgba => [(c[0] * vertex[0]) / 255, (c[1] * vertex[1]) / 255, (c[2] * vertex[2]) / 255, (c[3] * vertex[3]) / 255];
 
   const ref = material.textures[0];
@@ -99,10 +105,22 @@ export function paneVisual(
     [u0, u1] = [u0 * tr.scaleX + tr.x, u1 * tr.scaleX + tr.x];
     [v0, v1] = [v0 * tr.scaleY - tr.y, v1 * tr.scaleY - tr.y];
   }
+  // Clamp-sampled UVs far outside 0..1 (e.g. the lock screen's left panel uses U 0..390, V 0) read
+  // a single edge texel: draw that as a solid colour.
+  const single = (a: number, b: number, wrap: number) => a === b || (!isMirror(wrap) && !isRepeat(wrap) && Math.abs(b - a) > 2);
+  if (single(u0, u1, ref.wrapS) && single(v0, v1, ref.wrapT)) {
+    const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+    const sx = Math.min(img.width - 1, Math.floor(clamp01((u0 + u1) / 2) * img.width));
+    const sy = Math.min(img.height - 1, Math.floor(clamp01((v0 + v1) / 2) * img.height));
+    const t = img.data.subarray((sy * img.width + sx) * 4);
+    const c = mul([0, 1, 2, 3].map((i) => black[i] + ((white[i] - black[i]) * t[i]) / 255) as Rgba);
+    return c[3] < 2 ? null : { color: toCss(c) };
+  }
+
   const mirrorX = isMirror(ref.wrapS) && Math.max(Math.abs(u0), Math.abs(u1)) > 1.001;
   const mirrorY = isMirror(ref.wrapT) && Math.max(Math.abs(v0), Math.abs(v1)) > 1.001;
 
-  const key = `${ref.name}|${material.black}|${material.white}|${vertex.join(',')}|${dark}|${mirrorX}|${mirrorY}`;
+  const key = `${ref.name}|${black.join(',')}|${white.join(',')}|${vertex.join(',')}|${mirrorX}|${mirrorY}`;
   let url = urlCache.get(key);
   if (!url) {
     const W = img.width * (mirrorX ? 2 : 1);

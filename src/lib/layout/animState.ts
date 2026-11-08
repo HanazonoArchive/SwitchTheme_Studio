@@ -34,14 +34,22 @@ const GENERIC: Step[] = [
 const PER_LAYOUT: Record<string, Step[]> = {
   RdtBase: [['Enter', 'end'], ['RefreshIn', 'end'], ['BtnChangeUserIn', 'end'], ['MyPage', 'end']],
   RdtBtnIconGame: [['BaseOut', 'end']],
-  EntMain: [['LockMainIn', 'end'], ['SpecialNewsTextOut', 'end']],
+  // Idle lock screen on 13.0+: news on the left, the suspended game and "Continue" on the right.
+  EntMain: [['LockMainOut', 'end'], ['SpecialNewsTextOut', 'end']],
   FlcCntMain: [['ContentsIn', 'end'], ['RefreshIn', 'end']],
 };
 
 /** Shown or hidden by code rather than animations; hidden in the idle preview. */
 export const RUNTIME_HIDDEN: Record<string, string[]> = {
   'blyt/RdtBase.bflyt': ['L_ChildLock'],
+  // Album's colour fill is clipped by P_PictMask on console; masks aren't rendered yet.
+  'blyt/RdtBtnPvr.bflyt': ['P_Color'],
   'blyt/FlcCntMain.bflyt': ['L_Loading', 'T_00', 'T_Empty'],
+  // Only shown while a system applet (eShop, Album…) is suspended.
+  // and the alarm overlay only while an alarm rings.
+  // Parental-controls pill, the 'press the same button' prompt and news 'new' badges are
+  // runtime states too.
+  'blyt/EntMain.bflyt': ['L_BtnSystemApplet', 'N_Alarm', 'L_ChildLock', 'N_Lock', 'N_LockSub', 'L_IconNew_00', 'L_IconNew_01', 'L_IconNew_02', 'L_IconNew_03'],
 };
 
 export interface MaterialOverride {

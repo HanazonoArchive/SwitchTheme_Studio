@@ -310,6 +310,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                   <div className="text-[11px] text-slate-400 leading-relaxed">
                     <Check className="w-3 h-3 inline text-[#10b981] mr-1" />
                     {system.layouts.size} layouts, firmware {system.firmwareHint}. Preview and stock values are exact.
+                    {!systemLayouts.common && <> Add <span className="font-mono">common.szs</span> for the footer.</>}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => szsInputRef.current?.click()} className="text-[11px] text-slate-400 hover:text-white">
@@ -333,7 +334,9 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                   >
                     Load {info.szs}
                   </button>
-                  <p className="text-[10px] text-slate-500">You can select several .szs files at once. They stay in this browser.</p>
+                  <p className="text-[10px] text-slate-500">
+                    Select several at once, including <span className="font-mono">common.szs</span> for the footer. They stay in this browser.
+                  </p>
                 </>
               )}
               {systemError && <div className="text-[11px] text-red-300">{systemError}</div>}

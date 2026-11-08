@@ -15,6 +15,7 @@ import { AllAppsRenderer } from '../screens/AllAppsRenderer';
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
   system: SystemLayout | undefined;
+  common?: SystemLayout;
   mockState: MockSystemState;
   activeTopTab: 'editor' | 'motion';
   selectedKey: string | null;
@@ -29,6 +30,7 @@ interface ViewportProps {
 export const Viewport: React.FC<ViewportProps> = ({
   activeScreen,
   system,
+  common,
   mockState,
   activeTopTab,
   selectedKey,
@@ -246,6 +248,9 @@ export const Viewport: React.FC<ViewportProps> = ({
               <ExactLayoutRenderer
                 system={system!}
                 layout={activeScreen.layout}
+                common={common}
+                commonLayout={activeScreen.common}
+                hasWallpaper={Boolean(activeScreen.wallpaper)}
                 mockState={mockState}
                 interactive={isEditorMode}
                 selectedKey={selectedKey}

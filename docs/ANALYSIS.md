@@ -68,18 +68,31 @@ SwitchLayoutEditor itself only draws pane bounding boxes and doesn't render part
 doesn't help with texture decoding. Worth borrowing later: LayoutDiff (import a layout edited in another
 tool from an edited `.szs`), and its BFLAN editor and templates for building animations.
 
+## Rendering the console's own graphics
+
+- **Textures:** `timg/__Combined.bntx` is parsed and unswizzled from the Tegra block-linear layout. It
+  decodes R8, R8G8, RGB565, RGBA8, BC1–BC5, and applies each texture's channel mapping (most icons
+  are BC4 masks).
+- **Materials:** `mat1` black/white colours and texture wrap/UVs are applied. Mirrored half-icons
+  render whole, and `S_RoundRadius` user data gives the rounded plates. Basic Black recolours
+  neutral UI the way qlaunch does at runtime.
+- **Idle state:** layouts ship with every optional element visible, and qlaunch hides them by playing
+  animations. The `.bflan` files are read, and each screen gets an explicit idle recipe (checked
+  against a 23.0.1 dump). Names describe system events, so a name-based guess hid the whole home
+  menu (`RdtBase_GameIn` is "a game is launching"). Theme animations replace stock ones, as on
+  console.
+- **Runtime content:** game icons (Home and All Software), account buttons per user, clock and
+  battery, the focused game's cursor and title, and the Settings navigation/content are injected
+  where qlaunch creates them by code. Layout text is always a developer placeholder, so only known
+  runtime strings are shown.
+
 ## Known gaps / next steps
 
-1. **Textures.** Pictures are placeholders until BNTX (`timg/__Combined.bntx`) decoding lands: BC1/BC3/BC4/BC5
-   plus Tegra block-linear unswizzling. This is the biggest step toward a pixel-accurate preview.
-2. Not simulated yet: materials and `UsdPatches` (e.g. `S_RoundRadius`), `AddGroups`, `.bflan` animations,
-   the `HideOnlineBtn` animation fix, and the installer's per-firmware compatibility fixes (`NewFirmFixes.cs`).
-3. `common.json` targets `common.szs`, which can't be loaded yet; it is passed through untouched.
-4. Parts property overrides (the prt1 entry list) are ignored; parts render their own layout.
-5. Root layout names for Settings, News, User page and Player select are guesses with an automatic fallback.
-6. Verified against a real firmware 23.0.1 dump: all 579 layouts in the 7 archives parse, every parts pane
-   resolves, and 100% of the Vertical-OEM and FairTech home patches match real panes. qlaunch fills some
-   slots at runtime (game icons, account buttons, clock); the preview mocks those. The screen root for
-   Settings / User page is still a guess.
-7. Initial animation state (which popups start hidden) comes from `.bflan`; porting the Bflan reader from
-   SwitchThemesCommon is the next step after textures. Note both reference repos are GPL.
+1. ASTC textures (a few effects and card frames per screen) are drawn as placeholders.
+2. Most UI text comes from message files, not layouts, so labels are absent except a few mocked strings.
+3. All Software row positions and Settings pages are set by code at runtime; the preview approximates them.
+4. Animations are applied as end states only. Playing them (and previewing a theme's custom
+   animations in motion) is a next step.
+5. `common.json` targets `common.szs`, which can't be loaded yet; it is passed through untouched.
+6. Verified against a real firmware 23.0.1 dump: all 579 layouts parse, every parts pane resolves,
+   and the sample themes' patches all match. Other firmware versions haven't been tested.

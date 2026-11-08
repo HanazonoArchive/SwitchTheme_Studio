@@ -253,6 +253,7 @@ export const Viewport: React.FC<ViewportProps> = ({
                 viewScale={finalScale}
                 onSelect={onSelect}
                 onDragPane={onDragPane}
+                onUpdateMockState={onUpdateMockState}
               />
             ) : (
               <>

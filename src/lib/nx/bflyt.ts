@@ -42,10 +42,33 @@ export interface BflytPane {
   fontColor?: string;
   fontSize?: Vec2;
   textAlignX?: Origin;
+  /** pic1/txt1/wnd1: index into the file's materials. */
+  materialIndex?: number;
+  /** pic1/wnd1 content: first UV set as [TL, TR, BL, BR]. */
+  uv?: [Vec2, Vec2, Vec2, Vec2];
+  /** usd1 user data (e.g. S_RoundRadius, S_BorderSize), numbers only. */
+  userData?: Record<string, number[]>;
   /** prt1: name of the layout this part instantiates (without blyt/ and extension). */
   partName?: string;
   partScale?: Vec2;
   children: BflytPane[];
+}
+
+export interface TextureRef {
+  /** Name from txl1, e.g. "RdtIcoShop^s". */
+  name: string;
+  /** 0 NearClamp 1 NearRepeat 2 NearMirror 3 MirrorOnce 4 Clamp 5 Repeat 6 Mirror 7 MirrorOnceBorder */
+  wrapS: number;
+  wrapT: number;
+}
+
+export interface BflytMaterial {
+  name: string;
+  /** Output = lerp(black, white, texture), as "AABBGGRR" strings like layout.json. */
+  black: string;
+  white: string;
+  textures: TextureRef[];
+  transforms: { x: number; y: number; rotation: number; scaleX: number; scaleY: number }[];
 }
 
 export interface BflytFile {
@@ -55,8 +78,69 @@ export interface BflytFile {
   root: BflytPane | null;
   groups: { name: string; panes: string[] }[];
   textures: string[];
+  materials: BflytMaterial[];
   /** Every pane by name (first wins on duplicates, as in the injector's FindPane). */
   byName: Map<string, BflytPane>;
+}
+
+function readUv(r: BinaryReader): [Vec2, Vec2, Vec2, Vec2] {
+  const v = () => ({ X: r.f32(), Y: r.f32() });
+  return [v(), v(), v(), v()];
+}
+
+function readMaterials(r: BinaryReader, start: number, version: number, textures: string[]): BflytMaterial[] {
+  r.seek(start + 8);
+  const count = r.u16();
+  r.u16();
+  const offsets = Array.from({ length: count }, () => r.u32());
+  return offsets.map((o) => {
+    r.seek(start + o);
+    const name = r.fixedString(28);
+    let flags: number;
+    let black: string;
+    let white: string;
+    if (version >= 0x08000000) {
+      flags = r.u32();
+      r.u32();
+      black = colorString(r);
+      white = colorString(r);
+    } else {
+      black = colorString(r);
+      white = colorString(r);
+      flags = r.u32();
+    }
+    const tex = Array.from({ length: flags & 3 }, () => {
+      const id = r.u16();
+      return { name: textures[id] ?? '', wrapS: r.u8(), wrapT: r.u8() };
+    });
+    const transforms = Array.from({ length: (flags >> 2) & 3 }, () => ({ x: r.f32(), y: r.f32(), rotation: r.f32(), scaleX: r.f32(), scaleY: r.f32() }));
+    return { name, black, white, textures: tex, transforms };
+  });
+}
+
+/** usd1: numeric user properties (strings are skipped). */
+function readUserData(r: BinaryReader, start: number): Record<string, number[]> {
+  const out: Record<string, number[]> = {};
+  r.seek(start + 8);
+  const count = r.u16();
+  r.u16();
+  for (let i = 0; i < count; i++) {
+    const entry = r.pos;
+    const nameOff = r.u32();
+    const dataOff = r.u32();
+    const len = r.u16();
+    const type = r.u8();
+    r.u8();
+    const next = r.pos;
+    r.seek(entry + nameOff);
+    const name = r.cString();
+    if (type === 1 || type === 2) {
+      r.seek(entry + dataOff);
+      out[name] = Array.from({ length: len }, () => (type === 1 ? r.i32() : r.f32()));
+    }
+    r.seek(next);
+  }
+  return out;
 }
 
 const PANE_KINDS = new Set(['pan1', 'pic1', 'txt1', 'wnd1', 'bnd1', 'prt1']);
@@ -106,11 +190,28 @@ function readPane(r: BinaryReader, kind: PaneKind, sectionStart: number, section
     if (kind === 'pic1') {
       r.seek(sectionStart + 0x54);
       pane.colors = { TL: colorString(r), TR: colorString(r), BL: colorString(r), BR: colorString(r) };
+      pane.materialIndex = r.u16();
+      const uvCount = r.u8();
+      r.u8();
+      if (uvCount > 0) pane.uv = readUv(r);
+    } else if (kind === 'wnd1') {
+      // Window pane: stretch (4×i16), frame size (4×i16), frame count, flags, pad, content offset, frame table offset.
+      r.seek(sectionStart + 0x54 + 16);
+      r.u8(); // frame count
+      r.u8();
+      r.u16();
+      const contentOffset = r.u32();
+      r.seek(sectionStart + contentOffset);
+      pane.colors = { TL: colorString(r), TR: colorString(r), BL: colorString(r), BR: colorString(r) };
+      pane.materialIndex = r.u16();
+      const uvCount = r.u8();
+      r.u8();
+      if (uvCount > 0) pane.uv = readUv(r);
     } else if (kind === 'txt1') {
       r.seek(sectionStart + 0x54);
       const textLength = r.u16();
       r.u16(); // restricted length
-      r.u16(); // material
+      pane.materialIndex = r.u16();
       r.u16(); // font
       const align = r.u8();
       pane.textAlignX = ((align >> 2) & 3) as Origin;
@@ -159,6 +260,7 @@ export function parseBflyt(data: Uint8Array): BflytFile {
     root: null,
     groups: [],
     textures: [],
+    materials: [],
     byName: new Map(),
   };
 
@@ -189,6 +291,20 @@ export function parseBflyt(data: Uint8Array): BflytFile {
       for (const o of offsets) {
         r.seek(base + o);
         file.textures.push(r.cString());
+      }
+    } else if (magic === 'mat1') {
+      try {
+        file.materials = readMaterials(r, off, version, file.textures);
+      } catch {
+        /* materials are optional for previewing */
+      }
+    } else if (magic === 'usd1') {
+      if (lastPane) {
+        try {
+          lastPane.userData = readUserData(r, off);
+        } catch {
+          /* ignore */
+        }
       }
     } else if (PANE_KINDS.has(magic)) {
       const pane = readPane(r, magic as PaneKind, off, end, version);

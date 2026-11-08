@@ -14,7 +14,8 @@ import { ProjectModal } from './features/project/ProjectModal';
 import { ExportModal } from './features/project/ExportModal';
 
 import { useHistory } from './lib/state/useHistory';
-import { editPane, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
+import { editPane, hasLayoutChanges, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
+import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
 import { loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
 import { loadWallpaper } from './lib/theme/images';
@@ -79,8 +80,12 @@ export function App() {
   const handleEditPane = useCallback(
     (key: string, edit: PaneEdit, opts?: { transient?: boolean }) => {
       updateActiveScreen((s) => {
-        const info = getPaneInfo(s.layout, systemLayouts[s.target], key);
-        return { layout: editPane(s.layout, info.file, info.name, info.current, edit) };
+        const sys = systemLayouts[s.target];
+        // A layout started in the studio is made for this console: stamp its firmware on the first
+        // edit, like the injector's LayoutDiff does, so the installer doesn't add downgrade fixes.
+        const base = !hasLayoutChanges(s.layout) && s.layout.TargetFirmware === undefined && sys && sys.firmware >= FW.Fw11_0 ? stampFirmware(s.layout, s.target, sys.firmware) : s.layout;
+        const info = getPaneInfo(base, sys, key);
+        return { layout: editPane(base, info.file, info.name, info.current, edit) };
       }, opts);
     },
     [updateActiveScreen, systemLayouts],
@@ -318,7 +323,13 @@ export function App() {
       />
 
       {project && (
-        <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} project={project} activeScreen={activeScreen!} />
+        <ExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          project={project}
+          activeScreen={activeScreen!}
+          systemLayouts={systemLayouts}
+        />
       )}
     </div>
   );

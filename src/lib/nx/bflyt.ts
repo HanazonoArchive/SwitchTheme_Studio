@@ -131,7 +131,10 @@ function readPane(r: BinaryReader, kind: PaneKind, sectionStart: number, section
       const count = r.u32();
       pane.partScale = { X: r.f32(), Y: r.f32() };
       r.pos += count * (24 + 4 + 12);
-      if (version >= 0x08000000 && r.pos + 24 <= sectionEnd) pane.partName = r.fixedString(24);
+      // The injector reads a fixed 24-byte name, but real 23.x files store a NUL-terminated
+      // string that can be longer (e.g. RdtCloudBackupBtnSelectUser) and end the section right
+      // after it. Read up to the terminator or the section end.
+      if (version >= 0x08000000 && r.pos < sectionEnd) pane.partName = r.fixedString(sectionEnd - r.pos) || undefined;
     }
   } catch {
     // Pane-specific data is best effort; the base transform is what matters.

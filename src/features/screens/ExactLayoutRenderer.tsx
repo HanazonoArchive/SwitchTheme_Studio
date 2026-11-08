@@ -1,7 +1,8 @@
 import React, { useMemo, useRef } from 'react';
 import type { BflytPane } from '../../lib/nx/bflyt';
 import type { LayoutPatch } from '../../lib/layout/patch';
-import { applyLayoutToBflyt, findFilePatch, paneKey } from '../../lib/layout/patch';
+import { applyLayoutToBflyt, findPanePatch, paneKey } from '../../lib/layout/patch';
+import { fileLayers } from '../../lib/layout/paneModel';
 import { resolvePartLayout, type SystemLayout } from '../../lib/layout/systemLayouts';
 import type { MockSystemState } from '../../types/simulation';
 import { layoutColorToCss } from '../../lib/theme/stock';
@@ -33,6 +34,28 @@ interface Props {
 }
 
 const MAX_PART_DEPTH = 6;
+const ICON_LAYOUT = 'blyt/RdtBtnIconGame.bflyt';
+
+/** Applet icon panes, from TextureReplacement.ResidentMenu in SwitchThemesCommon. */
+const APPLET_ICON_PANES = new Set([
+  'blyt/RdtBtnPvr.bflyt::P_Pict_00',
+  'blyt/RdtBtnNtf.bflyt::P_PictNtf_00',
+  'blyt/RdtBtnShop.bflyt::P_Pict',
+  'blyt/RdtBtnCtrl.bflyt::P_Form',
+  'blyt/RdtBtnSet.bflyt::P_Pict',
+  'blyt/RdtBtnPow.bflyt::P_Pict_00',
+  'blyt/RdtBtnLR.bflyt::P_LR_00',
+  'blyt/RdtBtnVgc.bflyt::P_Pict_00',
+  'blyt/RdtBtnSplay.bflyt::P_Pict_00',
+]);
+const APPLET_COLORS: Record<string, string> = {
+  'blyt/RdtBtnNtf.bflyt': '#e60012',
+  'blyt/RdtBtnShop.bflyt': '#ff7d00',
+  'blyt/RdtBtnPvr.bflyt': '#00a2e8',
+  'blyt/RdtBtnLR.bflyt': '#e60012',
+  'blyt/RdtBtnVgc.bflyt': '#8b5cf6',
+  'blyt/RdtBtnSplay.bflyt': '#10b981',
+};
 
 const anchor = (o: number, size: number) => (o === 1 ? -size / 2 : o === 2 ? size / 2 : 0);
 /** Offset of the rect's left/top edge from the pivot, in CSS (Y down) space. */
@@ -43,6 +66,7 @@ interface Ctx {
   file: string;
   depth: number;
   iconIndex: number | null;
+  accountIndex: number | null;
   worldScale: { x: number; y: number };
 }
 
@@ -60,7 +84,8 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
   // Apply patches per layout file once; parts reuse the patched tree of their file.
   const patchedTrees = useMemo(() => {
     const m = new Map<string, BflytPane | null>();
-    for (const [name, f] of system.layouts) m.set(name, applyLayoutToBflyt(f, findFilePatch(layout, name)));
+    // Same order as the installer: its firmware fixes, the theme, then fixes for known layouts.
+    for (const [name, f] of system.layouts) m.set(name, applyLayoutToBflyt(f, fileLayers(layout, system, name)));
     return m;
   }, [system, layout]);
 
@@ -97,33 +122,58 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
     onDragPane(d.key, 0, 0, 'end');
   };
 
-  const renderContent = (pane: BflytPane, ctx: Ctx, w: number, h: number) => {
+  /**
+   * Mock content for slots qlaunch fills at runtime. Anything else stays invisible (textures
+   * aren't decoded yet), so layouts' filler text and hidden popups don't clutter the preview.
+   */
+  const renderContent = (pane: BflytPane, ctx: Ctx, w: number): React.ReactNode => {
+    const fill = (node: React.ReactNode) => node;
     if (pane.kind === 'pic1') {
-      if ((pane.name === 'P_IconGame' || pane.name === 'P_Icon') && ctx.iconIndex !== null) {
-        const game = mockState.games[ctx.iconIndex % Math.max(1, mockState.games.length)];
-        if (game) return <img src={game.coverUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />;
+      if ((pane.name === 'P_IconGame' || pane.name === 'P_Icon' || pane.name === 'P_Image') && ctx.iconIndex !== null) {
+        const game = mockState.games[ctx.iconIndex];
+        if (game) return fill(<img src={game.coverUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />);
+      }
+      // Round button plate behind applet / account icons.
+      if (pane.name === 'P_PictBase' && /RdtBtn(?!IconGame)/.test(ctx.file)) {
+        const user = ctx.accountIndex !== null ? mockState.users[ctx.accountIndex] : null;
+        return fill(
+          <div
+            className="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none"
+            style={{
+              background: user ? user.avatarBg : isDark ? '#4a4a4a' : '#ffffff',
+              boxShadow: isDark ? 'none' : '0 1px 3px rgba(0,0,0,0.2)',
+              fontSize: w * 0.5,
+            }}
+          >
+            {user?.avatarIcon}
+          </div>,
+        );
+      }
+      // Applet glyph slots (same panes the injector replaces with custom icons).
+      if (APPLET_ICON_PANES.has(`${ctx.file}::${pane.name}`)) {
+        const color = APPLET_COLORS[ctx.file] ?? ink;
+        return fill(<div className="absolute rounded-md pointer-events-none" style={{ inset: '18%', background: color, opacity: 0.9 }} />);
       }
       return null;
     }
-    if (pane.kind === 'txt1') {
-      let text = pane.text ?? '';
-      if (/time/i.test(pane.name)) text = mockState.time;
-      else if (/battery|bat/i.test(pane.name) && /\d/.test(text)) text = `${mockState.battery}%`;
-      if (!text) return null;
-      const size = pane.fontSize?.Y ?? Math.min(h, 24);
-      return (
+    if (pane.kind === 'pan1' && ctx.file === 'blyt/Hud.bflyt' && (pane.name === 'N_Time' || pane.name === 'N_BatteryNum')) {
+      const text = pane.name === 'N_Time' ? mockState.time : `${mockState.battery}%`;
+      return fill(
         <div
-          className="absolute inset-0 flex items-center whitespace-pre overflow-visible pointer-events-none leading-none"
-          style={{
-            fontSize: `${size}px`,
-            color: pane.fontColor && pane.fontColor !== 'FFFFFFFF' ? layoutColorToCss(pane.fontColor) : ink,
-            justifyContent: pane.textAlignX === 1 ? 'flex-start' : pane.textAlignX === 2 ? 'flex-end' : 'center',
-            fontFamily: "'Nunito Sans', 'Poppins', sans-serif",
-            width: w,
-          }}
+          className="absolute top-1/2 -translate-y-1/2 right-0 whitespace-nowrap pointer-events-none font-semibold"
+          style={{ fontSize: pane.name === 'N_Time' ? 26 : 20, color: ink, fontFamily: "'Nunito Sans', 'Poppins', sans-serif" }}
         >
           {text}
-        </div>
+        </div>,
+      );
+    }
+    if (pane.kind === 'txt1' && ctx.iconIndex !== null && /^T_(Name|Title)/.test(pane.name)) {
+      const game = mockState.games[ctx.iconIndex];
+      if (!game) return null;
+      return fill(
+        <div className="absolute inset-0 flex items-center whitespace-nowrap pointer-events-none" style={{ fontSize: pane.fontSize?.Y ?? 24, color: layoutColorToCss(pane.fontColor) }}>
+          {game.title}
+        </div>,
       );
     }
     return null;
@@ -131,7 +181,13 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
 
   const renderPane = (pane: BflytPane, parentW: number, parentH: number, ctx: Ctx): React.ReactNode => {
     const key = paneKey(ctx.file, pane.name);
-    const hidden = !pane.visible || pane.scale.X === 0 || pane.scale.Y === 0;
+    // qlaunch shows one account button per user at runtime, unless the theme hides it.
+    const accountMatch = /^L_BtnAccount_(\d+)$/.exec(pane.name);
+    const runtimeShown =
+      accountMatch !== null && parseInt(accountMatch[1], 10) < mockState.users.length && findPanePatch(layout, ctx.file, pane.name)?.Visible !== false;
+    const hidden = (!pane.visible && !runtimeShown) || pane.scale.X === 0 || pane.scale.Y === 0;
+    // The background layout is replaced by the theme image / console background layer.
+    if (pane.kind === 'prt1' && (pane.partName === 'BgNml' || pane.name === 'L_BgNml')) return null;
     // Hidden panes are skipped, except the selected one, which shows as an outline only.
     if (hidden && key !== selectedKey) return null;
 
@@ -142,6 +198,7 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
     const childCtx: Ctx = {
       ...ctx,
       iconIndex: iconMatch ? parseInt(iconMatch[1], 10) : ctx.iconIndex,
+      accountIndex: accountMatch ? parseInt(accountMatch[1], 10) : ctx.accountIndex,
       worldScale: { x: ctx.worldScale.x * pane.scale.X, y: ctx.worldScale.y * pane.scale.Y },
     };
 
@@ -155,6 +212,7 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
           file: partFile,
           depth: ctx.depth + 1,
           iconIndex: childCtx.iconIndex,
+          accountIndex: childCtx.accountIndex,
           worldScale: { x: childCtx.worldScale.x * ps.X, y: childCtx.worldScale.y * ps.Y },
         };
         partChildren = (
@@ -165,7 +223,18 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
       }
     }
 
-    const drawable = pane.kind !== 'pan1';
+    // Game icons are created by code inside the N_Icon_xx slots, not stored in RdtBase.
+    if (!hidden && iconMatch && !pane.children.some((c) => c.kind === 'prt1') && childCtx.iconIndex! < Math.min(12, mockState.games.length)) {
+      const iconRoot = patchedTrees.get(ICON_LAYOUT);
+      if (iconRoot && ctx.depth < MAX_PART_DEPTH) {
+        partChildren = renderPane(iconRoot, w, h, { ...childCtx, file: ICON_LAYOUT, depth: ctx.depth + 1 });
+      }
+    }
+
+    const content = hidden ? null : renderContent(pane, ctx, w);
+    const drawable = pane.kind !== 'pan1' || content !== null;
+    // Only things you can see (or everything, in wireframe mode) take clicks.
+    const hittable = interactive && (isSelected || content !== null || (showAllOutlines && drawable));
     const outline = isSelected
       ? '2px solid #10b981'
       : showAllOutlines && drawable
@@ -188,12 +257,12 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
       >
         <div
           data-pane={key}
-          onPointerDown={drawable || isSelected ? (e) => startDrag(e, key, ctx) : undefined}
+          onPointerDown={hittable ? (e) => startDrag(e, key, ctx) : undefined}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
-          onMouseDown={interactive && (drawable || isSelected) ? (e) => e.stopPropagation() : undefined}
+          onMouseDown={hittable ? (e) => e.stopPropagation() : undefined}
           onClick={(e) => e.stopPropagation()}
-          className={`absolute ${interactive && (drawable || isSelected) ? 'cursor-move' : 'pointer-events-none'}`}
+          className={`absolute ${hittable ? 'cursor-move' : 'pointer-events-none'}`}
           style={{
             left: rectX(pane.originX, w),
             top: rectY(pane.originY, h),
@@ -201,21 +270,11 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
             height: h,
             outline: interactive ? outline : 'none',
             outlineOffset: -1,
-            // Textures aren't decoded yet: draw picture/window panes as a soft placeholder so the
-            // composition is readable in both editor and simulator.
-            background:
-              isSelected && interactive
-                ? 'rgba(16,185,129,0.12)'
-                : !hidden && (pane.kind === 'pic1' || pane.kind === 'wnd1')
-                  ? isDark
-                    ? 'rgba(255,255,255,0.07)'
-                    : 'rgba(0,0,0,0.06)'
-                  : undefined,
-            boxShadow: !hidden && (pane.kind === 'pic1' || pane.kind === 'wnd1') ? `inset 0 0 0 1px ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'}` : undefined,
-            pointerEvents: interactive && (drawable || isSelected) ? 'auto' : 'none',
+            background: isSelected && interactive ? 'rgba(16,185,129,0.12)' : undefined,
+            pointerEvents: hittable ? 'auto' : 'none',
           }}
         >
-          {!hidden && renderContent(pane, ctx, w, h)}
+          {content}
           {isSelected && interactive && (
             <span className="absolute -top-5 left-0 font-mono text-[11px] px-1 rounded bg-[#10b981] text-black whitespace-nowrap">
               {pane.name}
@@ -234,7 +293,7 @@ export const ExactLayoutRenderer: React.FC<Props> = ({
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ width: main.width, height: main.height }}>
       <div className="absolute" style={{ left: main.width / 2, top: main.height / 2 }}>
-        {renderPane(root, main.width, main.height, { file: system.mainLayout, depth: 0, iconIndex: null, worldScale: { x: 1, y: 1 } })}
+        {renderPane(root, main.width, main.height, { file: system.mainLayout, depth: 0, iconIndex: null, accountIndex: null, worldScale: { x: 1, y: 1 } })}
       </div>
     </div>
   );

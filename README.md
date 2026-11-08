@@ -15,9 +15,11 @@ npm run build
 
 ## Exact preview
 
-Positions and defaults come from your console's own layout files. Run NXThemes Installer once, copy
-`sd:/themes/systemData/*.szs` to your PC, and load them in **Panes → Load ResidentMenu.szs** (or drop the
-`.szs` on the canvas). Without them the preview is a labelled approximation.
+Positions and defaults come from your console's own layout files. In NXThemes Installer open
+**Extract home menu → Extract szs layout files**, copy `sd:/themes/systemData/extracted/qlaunch/lyt/*.szs`
+(plus `mypage/` and `playerselect/` if you theme those) to your PC, and load them in **Panes** (or drop a
+`.szs` on the canvas). An installed theme doesn't change these files. Don't commit or share them; they are
+Nintendo's. Without them the preview is a labelled approximation.
 
 ## Theme kinds
 

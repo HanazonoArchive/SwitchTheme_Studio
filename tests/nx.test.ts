@@ -55,12 +55,14 @@ describe('bflyt', () => {
       children: [
         { kind: 'pan1', name: 'N_Group', pos: [10, -20], flag2: (1 << 6) | (2 << 4) | (2 << 2) | 1, children: [{ kind: 'pic1', name: 'P_Card' }] },
         { kind: 'prt1', name: 'L_Hud', partName: 'Hud', visible: false },
+        // Real 23.x files: name longer than 24 chars, section ends right after it.
+        { kind: 'prt1', name: 'L_Long', partName: 'RdtCloudBackupBtnSelectUser' },
       ],
     });
     const f = parseBflyt(data);
     expect(f.width).toBe(1280);
     const flat = flattenPanes(f.root).map((x) => `${x.depth}:${x.pane.name}`);
-    expect(flat).toEqual(['0:RootPane', '1:N_Group', '2:P_Card', '1:L_Hud']);
+    expect(flat).toEqual(['0:RootPane', '1:N_Group', '2:P_Card', '1:L_Hud', '1:L_Long']);
     const g = f.byName.get('N_Group')!;
     expect(g.position).toEqual({ X: 10, Y: -20, Z: 0 });
     expect([g.originX, g.originY, g.parentOriginX, g.parentOriginY]).toEqual([1, 2, 2, 1]);
@@ -68,6 +70,7 @@ describe('bflyt', () => {
     const hud = f.byName.get('L_Hud')!;
     expect(hud.visible).toBe(false);
     expect(hud.partName).toBe('Hud');
+    expect(f.byName.get('L_Long')!.partName).toBe('RdtCloudBackupBtnSelectUser');
   });
 });
 

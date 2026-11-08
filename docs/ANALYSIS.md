@@ -38,7 +38,7 @@ Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/Swi
   text, parts).
 - `src/lib/layout/patch.ts`: the layout.json model with the injector's exact semantics. Edits are immutable,
   scoped to `(file, pane)`, write only changed fields, and always write full vectors.
-- **Exact preview.** Load the console's own `.szs` (NXThemes Installer dumps them to `sd:/themes/systemData/`).
+- **Exact preview.** Load the console's own `.szs` (NXThemes Installer → Extract home menu writes them to `sd:/themes/systemData/extracted/`).
   The real pane tree is rendered as nested DOM nodes, so parent transforms compose like on the console. Stock
   values show in the Inspector, with per-field revert. Files are kept in IndexedDB.
 - Without the `.szs`, the old mock is still used but clearly labelled **Approximate**.
@@ -49,6 +49,25 @@ Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/Swi
 - Undo/redo (one drag = one step), arrow-key nudging, full pane browser, live `layout.json` editor, export checks.
 - Tests: `npm test` (parsers, patch semantics, import/export of both demo packs).
 
+## Installer behaviour now simulated
+
+From a deep dive of SwitchLayoutEditor and the SwitchThemesCommon code it builds on:
+
+- **Firmware fixes.** On 20.0+ the installer stacks its own patches under older themes
+  (`20_DowngradeTo19`, `20_LegacyAppletButtons`, plus fixes for known layouts by ID or name). The
+  decision logic (`NewFirmFixes.cs`, `SzsPatcher.PatchLayouts`) and the fix files are ported, and the
+  preview applies them in the same order. The firmware is detected per `.szs` like `FirmwareDetection.cs`.
+- **Export targets your firmware.** Layouts started in the studio get `TargetFirmware` (and
+  `HideOnlineBtn: false` on Home) on the first edit, as the injector's LayoutDiff does. Imported themes
+  keep their value, with a one-click "Target 20.0+ instead".
+- **Compatibility checker** (`LayoutCompatibility.cs`). Patches for missing panes are skipped by the
+  installer. Animations that reference missing panes or groups are dropped, because they would crash
+  the console. Both are shown in the Panes tab and the export dialog.
+
+SwitchLayoutEditor itself only draws pane bounding boxes and doesn't render parts or textures, so it
+doesn't help with texture decoding. Worth borrowing later: LayoutDiff (import a layout edited in another
+tool from an edited `.szs`), and its BFLAN editor and templates for building animations.
+
 ## Known gaps / next steps
 
 1. **Textures.** Pictures are placeholders until BNTX (`timg/__Combined.bntx`) decoding lands: BC1/BC3/BC4/BC5
@@ -58,5 +77,9 @@ Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/Swi
 3. `common.json` targets `common.szs`, which can't be loaded yet; it is passed through untouched.
 4. Parts property overrides (the prt1 entry list) are ignored; parts render their own layout.
 5. Root layout names for Settings, News, User page and Player select are guesses with an automatic fallback.
-6. The parser was tested against the injector's sample BFLYT and synthetic archives, not a real dumped
-   `ResidentMenu.szs`. That is the first thing to check.
+6. Verified against a real firmware 23.0.1 dump: all 579 layouts in the 7 archives parse, every parts pane
+   resolves, and 100% of the Vertical-OEM and FairTech home patches match real panes. qlaunch fills some
+   slots at runtime (game icons, account buttons, clock); the preview mocks those. The screen root for
+   Settings / User page is still a guess.
+7. Initial animation state (which popups start hidden) comes from `.bflan`; porting the Bflan reader from
+   SwitchThemesCommon is the next step after textures. Note both reference repos are GPL.

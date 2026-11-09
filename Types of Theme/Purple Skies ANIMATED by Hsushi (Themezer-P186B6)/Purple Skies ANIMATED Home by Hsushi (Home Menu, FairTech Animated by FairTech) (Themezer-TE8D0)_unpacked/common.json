@@ -1,1 +1,0 @@
-{"PatchName":"No Footer Line Home","AuthorName":"NSX","TargetFirmware":1100,"Files":[{"FileName":"blyt/FooterAll.bflyt","Patches":[{"PaneName":"L_Line_00","Position":{"X":5128.0,"Y":2000.0},"Visible":false},{"PaneName":"L_Line_01","Position":{"X":5128.0,"Y":2000.0}},{"PaneName":"L_Line_02","Position":{"X":5128.0,"Y":2000.0}}]}]}

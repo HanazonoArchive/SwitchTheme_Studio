@@ -1,4 +1,4 @@
-# SwitchTheme Studio: analysis and rework notes
+# Engineering notes
 
 Reference format: [exelix11/SwitchThemeInjector](https://github.com/exelix11/SwitchThemeInjector), mainly
 `SwitchThemesCommon/Layouts/LayoutPatches.cs` and `Bflyt/PatchingExtension.cs`.

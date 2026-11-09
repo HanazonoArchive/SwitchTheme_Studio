@@ -16,7 +16,7 @@ interface Props {
 
 const EXAMPLES = [
   { file: '/demos/purple-skies.zip', name: 'Purple Skies', by: 'Hsushi', note: 'Background image, reworked Home and lock screen' },
-  { file: '/demos/vertical-oem.zip', name: 'Vertical OEM', by: 'FairTech', note: 'Layout only: keeps the console background' },
+  { file: '/demos/vertical-oem.zip', name: 'Vertical OEM', by: 'sodasoba', note: 'Layout only: keeps the console background' },
 ];
 
 const ago = (t: number) => {

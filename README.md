@@ -32,7 +32,7 @@ npm run build:stock -- path/to/extracted
 
 ## Editing
 
-- **Canvas** (PixiJS/WebGL): Ctrl/⌘ + wheel zooms, wheel or Space + drag pans, double-click fits.
+- **Canvas** (PixiJS/WebGL): the wheel zooms around the cursor, Shift + wheel pans sideways, Space + drag or dragging the empty area pans, double-click fits.
 - **Select** a layer by clicking it; **Shift+Enter** selects its parent, **Enter** its first child.
   **Alt+click** picks the top layer under the cursor even inside the current selection.
 - **Move** by dragging (snaps to other layers and the screen; hold **Alt** to move freely, **Shift** to

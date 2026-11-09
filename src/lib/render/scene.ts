@@ -63,6 +63,8 @@ export interface SceneNode {
   children: SceneNode[];
   /** Extra offset applied to the children (home row scroll). */
   childOffsetX: number;
+  /** Vertical scroll of the children (All Software list), in local units. */
+  childOffsetY?: number;
   /** Clip to this vertical band (node space): scrolling pages. */
   clip?: { top: number; bottom: number };
   /** Node space -> screen. */
@@ -88,8 +90,10 @@ export interface Scene {
 const MAX_PART_DEPTH = 6;
 const ICON_LAYOUT = 'blyt/RdtBtnIconGame.bflyt';
 const APPS_PER_ROW = 6;
-/** All Software rows are laid out by code; measured on console. */
-const APPS_ROW_STEP = 184;
+/** All Software: gap between the N_Top spacer and the first row (measured on console). */
+const APPS_LIST_TOP = 20;
+/** Space kept under the focused row when the list scrolls down to it. */
+const APPS_SCROLL_MARGIN = 24;
 /** Header and footer lines: the scroll area between them. */
 const SCROLL_TOP = 88;
 const SCROLL_BOTTOM = 648;
@@ -295,7 +299,10 @@ export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boo
       }
     }
   }
-  // All Software rows are positioned by code: one per 184 px, unless the theme sets them.
+  // All Software is a list laid out by code: the rows stack below the N_Top spacer, each as tall
+  // as its own Size.Y (themes with taller tiles set it), so the layout's row positions are
+  // ignored, as on the console. Measured: the first row starts 20 px below N_Top's height
+  // (182 px from the top of the screen with the stock 162 px spacer).
   const flc = trees.get('blyt/FlcCntMain.bflyt');
   if (flc) {
     const rows: BflytPane[] = [];
@@ -304,10 +311,21 @@ export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boo
       p.children.forEach(walk);
     };
     walk(flc);
-    const first = rows.find((r) => r.name === 'L_BtnIconGame_00');
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    let top = APPS_LIST_TOP + (findChild(flc, 'N_Top')?.size.Y ?? 162);
     for (const r of rows) {
-      const n = parseInt(r.name.slice(-2), 10);
-      if (first && !findPanePatch(layout, 'blyt/FlcCntMain.bflyt', r.name)?.Position) r.position = { ...r.position, Y: first.position.Y - n * APPS_ROW_STEP };
+      r.position = { ...r.position, Y: -(top + r.size.Y / 2) };
+      top += r.size.Y;
+    }
+    // Sort label: with no group filter only the sort order shows, at the right edge.
+    const sort = findChild(flc, 'N_Sort');
+    if (sort) {
+      for (const n of ['T_00', 'N_Padding_00', 'P_Mark', 'N_Padding_01']) {
+        const p = findChild(sort, n);
+        if (p) p.visible = false;
+      }
+      const t = findChild(sort, 'T_01');
+      if (t && !findPanePatch(layout, 'blyt/FlcCntMain.bflyt', 'T_01')?.Position) t.position = { ...t.position, X: 0 };
     }
   }
   layoutHud(trees, layout);
@@ -365,6 +383,14 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const visible = Math.max(1, Math.floor(win.size.X / step));
     return Math.max(0, Math.min(selectedGame, Math.min(12, mock.games.length) - 1) - (visible - 1)) * step;
   })();
+
+  /** All Software: scroll the list so the focused game's row is inside the visible area. */
+  const appsScroll = (cnt: BflytPane, world: Mat) => {
+    const row = findChild(cnt, `L_BtnIconGame_${String(Math.floor(selectedGame / APPS_PER_ROW)).padStart(2, '0')}`);
+    if (!row || !world[3]) return 0;
+    const bottom = world[5] + (-row.position.Y + row.size.Y / 2) * world[3];
+    return bottom > SCROLL_BOTTOM ? (bottom - SCROLL_BOTTOM + APPS_SCROLL_MARGIN) / world[3] : 0;
+  };
 
   const textColor = (pane: BflytPane) => {
     // A colour set by the theme wins over the system palette.
@@ -619,7 +645,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const local: Mat = [cos * pane.scale.X, sin * pane.scale.X, -sin * pane.scale.Y, cos * pane.scale.Y, x, y];
     const world = mul(parentWorld, local);
     const childOffsetX = pane.name === 'N_Game' ? -gameScroll : 0;
-    const childWorld = childOffsetX ? mul(world, [1, 0, 0, 1, childOffsetX, 0]) : world;
+    const childOffsetY = ctx.file === 'blyt/FlcCntMain.bflyt' && pane.name === 'N_Cnt' ? -appsScroll(pane, world) : 0;
+    const childWorld = childOffsetX || childOffsetY ? mul(world, [1, 0, 0, 1, childOffsetX, childOffsetY]) : world;
     const id = `${idPrefix}/${pane.name}`;
 
     const injection = INJECT.find((i) => i.file === ctx.file && i.pane.test(pane.name) && ctx.src.trees.get(i.layout));
@@ -653,6 +680,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       content: null,
       children: [],
       childOffsetX,
+      childOffsetY,
       world,
       parentWorld,
       posScale: { x: pm.x, y: pm.y },
@@ -660,6 +688,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       gameIndex: childCtx.iconIndex,
     };
     if (!hidden) self.content = contentFor(pane, ctx, w, h);
+    // The All Software list scrolls between the header and footer lines.
+    if (ctx.file === 'blyt/FlcCntMain.bflyt' && pane.name === 'N_Cnt' && world[3]) self.clip = { top: (SCROLL_TOP - world[5]) / world[3], bottom: (SCROLL_BOTTOM - world[5]) / world[3] };
     if (hidden && key !== selectedKey) {
       // Keep hidden panes (and their subtree) in the scene for the layers panel, undrawn.
       self.hidden = true;

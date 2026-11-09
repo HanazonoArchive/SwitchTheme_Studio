@@ -205,10 +205,12 @@ function buildDisplay(node: SceneNode, hiddenIds: ReadonlySet<string>, res: numb
   if (node.children.length) {
     const kids = new Container();
     kids.x = node.childOffsetX;
+    kids.y = node.childOffsetY ?? 0;
     for (const ch of node.children) if (!ch.hidden && !hiddenIds.has(ch.id)) kids.addChild(buildDisplay(ch, hiddenIds, res, onImage));
     if (node.clip) {
       const m = new Graphics().rect(-4000, node.clip.top, 8000, node.clip.bottom - node.clip.top).fill(0xffffff);
-      kids.addChild(m);
+      // The mask stays put while the children scroll.
+      c.addChild(m);
       kids.mask = m;
     }
     c.addChild(kids);

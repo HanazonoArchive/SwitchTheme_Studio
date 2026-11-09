@@ -1,5 +1,5 @@
 import type { ImageDataLike } from '../nx/bntx';
-import type { StockTexture } from './stockPack';
+import { alphaBox, type StockTexture } from './stockPack';
 
 /**
  * The studio's own stand-ins for the console's UI textures, used with the built-in layouts.
@@ -108,10 +108,12 @@ const DRAWINGS: Record<string, Draw> = {
     c.fillStyle = '#fff';
     fill(c, () => (c.rect(w * 0.45, h * 0.42, w * 0.1, h * 0.32), c.arc(w / 2, h * 0.3, w * 0.065, 0, Math.PI * 2)));
   },
+  // Fade under news titles: clear at the top, nearly opaque at the bottom.
   'NewsMask_00^s': (c, w, h) => {
     const g = c.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0.9)');
     c.fillStyle = g;
     c.fillRect(0, 0, w, h);
   },
@@ -192,6 +194,9 @@ function newsHalf(c: CanvasRenderingContext2D, w: number, h: number) {
   stroke(c, lw, () => (c.moveTo(w * 0.42, h * 0.42), c.lineTo(w, h * 0.42)));
 }
 
+/** Fills and gradients that aren't pictograms: drawn as they are, never refitted. */
+const NO_FIT = new Set(['Checkered1px^r', 'CursorEff_08^w', 'NavBg_01^s', 'NewsMask_00^s', 'NewsIcon_Info^w', 'NtfIcoMovie^t', 'IcoBattM_64^s']);
+
 export const hasPlaceholderDrawing = (name: string) => name in DRAWINGS;
 export const PLACEHOLDER_NAMES = Object.keys(DRAWINGS);
 
@@ -213,9 +218,26 @@ export function renderStockTexture(t: StockTexture): ImageDataLike | null {
   c.strokeStyle = '#fff';
   const css = (v: number[]) => `rgba(${Math.round(v[0] * 255)},${Math.round(v[1] * 255)},${Math.round(v[2] * 255)},${v[3]})`;
   switch (t.kind) {
-    case 'drawn':
-      DRAWINGS[t.name]?.(c, w, h);
+    case 'drawn': {
+      const draw = DRAWINGS[t.name];
+      if (!draw) break;
+      if (!t.box || NO_FIT.has(t.name)) {
+        draw(c, w, h);
+        break;
+      }
+      // Draw, then move our picture onto the console picture's footprint in the frame, so the
+      // layout's positions, mirroring and UVs line it up exactly where the console's sits.
+      const tmp = canvas(w, h);
+      const tc = tmp.getContext('2d')!;
+      tc.fillStyle = '#fff';
+      tc.strokeStyle = '#fff';
+      draw(tc, w, h);
+      const ours = alphaBox({ width: w, height: h, data: tc.getImageData(0, 0, w, h).data });
+      if (!ours) break;
+      const [x0, y0, x1, y1] = t.box;
+      c.drawImage(tmp, ours[0], ours[1], ours[2] - ours[0], ours[3] - ours[1], x0, y0, x1 - x0, y1 - y0);
       break;
+    }
     case 'solid':
       c.fillStyle = css(t.rgba);
       c.fillRect(0, 0, w, h);

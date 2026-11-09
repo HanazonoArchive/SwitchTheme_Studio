@@ -49,6 +49,8 @@ export const RUNTIME_HIDDEN: Record<string, string[]> = {
   'blyt/NtfBtnSquareList.bflyt': ['N_Loading', 'P_ImageSenderLoading'],
   'blyt/MypMyStatus.bflyt': ['L_Loading'],
   'blyt/EntBtnNtf.bflyt': ['P_Loading', 'P_IconMovie'],
+  // The focus cursor is drawn by a border shader (S_Border* user data); the preview draws its own.
+  'blyt/Cursor3.bflyt': ['N_Root', 'P_Main', 'P_Grow'],
   // Player LEDs: off in handheld mode.
   'blyt/FooterCtrl.bflyt': ['L_Indi_00'],
   'blyt/MypNav.bflyt': ['L_NewList', 'L_NewInv', 'L_New'],
@@ -76,7 +78,8 @@ export interface MaterialOverride {
 
 const animCache = new WeakMap<Uint8Array, Animation | null>();
 
-function loadStock(bytes: Uint8Array): Animation | null {
+function loadStock(bytes: Uint8Array | Animation): Animation | null {
+  if (!(bytes instanceof Uint8Array)) return bytes;
   if (!animCache.has(bytes)) {
     try {
       animCache.set(bytes, parseBflan(bytes));

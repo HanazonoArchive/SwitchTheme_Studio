@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ThemeProject, ThemeScreen } from './types/theme';
 import type { MockSystemState } from './types/simulation';
-import type { RailTab } from './features/editor/LeftRail';
 import { DEFAULT_MOCK_USERS, DEFAULT_MOCK_GAMES } from './constants/switchPanes';
 
 import { TopBar } from './features/editor/TopBar';
-import { LeftRail } from './features/editor/LeftRail';
-import { LeftDrawer } from './features/editor/LeftDrawer';
+import { LeftDrawer, type RailTab } from './features/editor/LeftDrawer';
 import { Viewport } from './features/editor/Viewport';
 import { Inspector } from './features/editor/Inspector';
-import { ScreenTimeline } from './features/editor/ScreenTimeline';
+import { ScreensList } from './features/editor/ScreensList';
+import { LayersPanel } from './features/editor/LayersPanel';
+import type { SnapSettings } from './features/canvas/EditorOverlay';
+import { buildScene, buildSource, type SceneNode } from './lib/render/scene';
 import { ProjectModal } from './features/project/ProjectModal';
 import { ExportModal } from './features/project/ExportModal';
 
@@ -17,6 +18,7 @@ import { useHistory } from './lib/state/useHistory';
 import { editPane, hasLayoutChanges, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
 import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
+import { loadStockLayouts } from './lib/stock/stockPack';
 import { isCommonSzs, loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
 import { loadWallpaper } from './lib/theme/images';
 import { newScreen } from './lib/theme/nxtheme';
@@ -26,7 +28,10 @@ export function App() {
   const history = useHistory<ThemeProject | null>(null);
   const project = history.value;
 
-  const [systemLayouts, setSystemLayouts] = useState<SystemLayoutMap>({});
+  // Console layouts: the built-in pack, overridden per screen by the user's own .szs files.
+  const [stockLayouts, setStockLayouts] = useState<SystemLayoutMap>({});
+  const [consoleLayouts, setSystemLayouts] = useState<SystemLayoutMap>({});
+  const systemLayouts = useMemo<SystemLayoutMap>(() => ({ ...stockLayouts, ...consoleLayouts }), [stockLayouts, consoleLayouts]);
   const [systemError, setSystemError] = useState<string | null>(null);
 
   const [mockState, setMockState] = useState<MockSystemState>({
@@ -43,22 +48,62 @@ export function App() {
   });
 
   const [activeRailTab, setActiveRailTab] = useState<RailTab>('media');
-  const [activeTopTab, setActiveTopTab] = useState<'editor' | 'motion'>('editor');
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // The selected instance (a layout used 12 times has 12 instances; edits apply to all of them).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Editor-only visibility and locks (never exported).
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(new Set());
+  const [lockedIds, setLockedIds] = useState<ReadonlySet<string>>(new Set());
+  const [snap, setSnap] = useState<SnapSettings>({ grid: false, gridSize: 8, guides: true });
   // Which screen is open is view state, not part of undo history.
   const [activeScreenId, setActiveScreenId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(true);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Stock layouts from the user's console, remembered between sessions.
+  // Built-in layouts, plus the user's console files remembered between sessions.
   useEffect(() => {
+    loadStockLayouts().then(setStockLayouts);
     loadSavedSystemLayouts().then((saved) => setSystemLayouts((prev) => ({ ...saved, ...prev })));
   }, []);
 
   const activeScreen = project ? project.screens.find((s) => s.id === activeScreenId) || project.screens[0] : null;
   const activeId = activeScreen?.id ?? null;
   const activeSystem = activeScreen ? systemLayouts[activeScreen.target] : undefined;
-  const isEditor = activeTopTab === 'editor';
+  const isEditor = mode === 'edit';
+
+  /* ------------------------------ scene ------------------------------ */
+
+  const mainSource = useMemo(() => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true) : null), [activeSystem, activeScreen?.layout]); // eslint-disable-line react-hooks/exhaustive-deps
+  const commonSource = useMemo(
+    () => (systemLayouts.common && activeScreen ? buildSource(systemLayouts.common, activeScreen.common ?? {}, true, false) : null),
+    [systemLayouts.common, activeScreen?.common], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const scene = useMemo(
+    () =>
+      activeSystem && mainSource && activeScreen
+        ? buildScene({ system: activeSystem, main: mainSource, common: commonSource, hasWallpaper: Boolean(activeScreen.wallpaper), mock: mockState, selectedKey })
+        : null,
+    [activeSystem, mainSource, commonSource, activeScreen?.wallpaper, mockState, selectedKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const selectNode = useCallback((n: SceneNode | null) => {
+    setSelectedKey(n?.key ?? null);
+    setSelectedId(n?.id ?? null);
+  }, []);
+  // A selection made by key (Inspector, pane lists) shows on its first instance on screen.
+  const activeSelectedId = useMemo(() => {
+    if (!scene || !selectedKey) return null;
+    const cur = selectedId ? scene.flat.find((n) => n.id === selectedId) : undefined;
+    if (cur?.key === selectedKey) return selectedId;
+    return scene.flat.find((n) => n.key === selectedKey)?.id ?? null;
+  }, [scene, selectedKey, selectedId]);
+  const toggleIn = (set: ReadonlySet<string>, id: string) => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  };
 
   const updateActiveScreen = useCallback(
     (updates: Partial<ThemeScreen> | ((s: ThemeScreen) => Partial<ThemeScreen>), opts?: { transient?: boolean }) => {
@@ -122,6 +167,31 @@ export function App() {
     [activeScreen, systemLayouts, handleEditPane, history],
   );
 
+  // Resize on canvas: size plus the position change that keeps the opposite edge in place.
+  const handleResizePane = useCallback(
+    (key: string, c: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => {
+      if (!activeScreen) return;
+      if (phase === 'start') {
+        dragBase.current = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], key).current;
+        return;
+      }
+      if (phase === 'end') {
+        dragBase.current = null;
+        history.commit();
+        return;
+      }
+      const base = dragBase.current;
+      if (!base) return;
+      const r = (v: number) => Math.round(v * 10) / 10;
+      handleEditPane(
+        key,
+        { position: { X: r(base.position.X + c.dx), Y: r(base.position.Y + c.dy) }, size: { X: r(Math.max(1, c.w)), Y: r(Math.max(1, c.h)) } },
+        { transient: true },
+      );
+    },
+    [activeScreen, systemLayouts, handleEditPane, history],
+  );
+
   /* ------------------------------ keyboard ------------------------------ */
 
   useEffect(() => {
@@ -141,7 +211,24 @@ export function App() {
         return;
       }
       if (e.key === 'Escape') {
-        setSelectedKey(null);
+        selectNode(null);
+        return;
+      }
+      // Shift+Enter selects the parent layer, Enter the first child (like Figma).
+      if (isEditor && e.key === 'Enter' && activeSelectedId && scene) {
+        e.preventDefault();
+        const editable = (n?: SceneNode) => n && n.key && n.editable;
+        if (e.shiftKey) {
+          const parts = activeSelectedId.split('/');
+          for (let i = parts.length - 1; i > 1; i--) {
+            const p = scene.flat.find((n) => n.id === parts.slice(0, i).join('/'));
+            if (editable(p)) return selectNode(p!);
+          }
+        } else {
+          const n = scene.flat.find((x) => x.id === activeSelectedId);
+          const child = n?.children.find((c) => editable(c));
+          if (child) selectNode(child);
+        }
         return;
       }
 
@@ -165,7 +252,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [history, isEditor, selectedKey, activeScreen, systemLayouts, handleEditPane]);
+  }, [history, isEditor, selectedKey, activeSelectedId, scene, selectNode, activeScreen, systemLayouts, handleEditPane]);
 
   /* ------------------------------ background ------------------------------ */
 
@@ -222,19 +309,22 @@ export function App() {
       history.set((prev) => (prev ? { ...prev, screens: [...prev.screens, screen] } : prev));
       setActiveScreenId(screen.id);
     }
-    setSelectedKey(null);
+    selectNode(null);
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0b0d11] text-[#f1f5f9] select-none font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg)] text-[var(--text)] select-none">
       <TopBar
         project={project}
-        activeTab={activeTopTab}
-        onSelectTab={setActiveTopTab}
+        mode={mode}
+        onModeChange={(m) => {
+          setMode(m);
+          if (m === 'preview') selectNode(null);
+        }}
         onOpenProjectModal={() => setIsProjectModalOpen(true)}
         onCloseProject={() => {
           history.reset(null);
-          setSelectedKey(null);
+          selectNode(null);
           setIsProjectModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
@@ -246,71 +336,81 @@ export function App() {
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
-        <LeftRail activeTab={activeRailTab} onSelectTab={setActiveRailTab} />
-
-        {activeScreen && (
-          <LeftDrawer
-            activeTab={activeRailTab}
-            activeScreen={activeScreen}
-            system={activeSystem}
-            systemLayouts={systemLayouts}
-            systemError={systemError}
-            mockState={mockState}
-            selectedKey={selectedKey}
-            onSelect={setSelectedKey}
-            onUpdateActiveScreen={updateActiveScreen}
-            onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
-            onReplaceWallpaper={handleReplaceWallpaper}
-            onExtractWallpaper={handleExtractWallpaper}
-            onEditPane={handleEditPane}
-            onRevertPane={handleRevertPane}
-            onLoadSystemSzs={handleLoadSystemSzs}
-            onForgetSystemSzs={handleForgetSystemSzs}
-            onCommitHistory={history.commit}
-          />
+        {project && activeScreen && (
+          <aside className="w-[264px] shrink-0 flex flex-col bg-[var(--panel)] border-r border-[var(--border)] min-h-0">
+            <ScreensList
+              screens={project.screens}
+              activeScreenId={activeScreen.id}
+              onSelectScreen={(id) => {
+                setActiveScreenId(id);
+                selectNode(null);
+              }}
+              onAddScreen={handleAddScreen}
+            />
+            <LeftDrawer
+              activeTab={activeRailTab}
+              onSelectTab={setActiveRailTab}
+              activeScreen={activeScreen}
+              system={activeSystem}
+              systemLayouts={systemLayouts}
+              consoleLayouts={consoleLayouts}
+              systemError={systemError}
+              mockState={mockState}
+              selectedKey={selectedKey}
+              onSelect={setSelectedKey}
+              onUpdateActiveScreen={updateActiveScreen}
+              onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
+              onReplaceWallpaper={handleReplaceWallpaper}
+              onExtractWallpaper={handleExtractWallpaper}
+              onEditPane={handleEditPane}
+              onRevertPane={handleRevertPane}
+              onLoadSystemSzs={handleLoadSystemSzs}
+              onForgetSystemSzs={handleForgetSystemSzs}
+              onCommitHistory={history.commit}
+            />
+          </aside>
         )}
 
         <Viewport
           activeScreen={activeScreen}
-          system={activeSystem}
-          common={systemLayouts.common}
+          scene={scene}
+          mode={mode}
           mockState={mockState}
-          activeTopTab={activeTopTab}
-          selectedKey={selectedKey}
-          onSelect={setSelectedKey}
+          selectedId={activeSelectedId}
+          hiddenIds={hiddenIds}
+          lockedIds={lockedIds}
+          snap={snap}
+          onSnapChange={setSnap}
+          onSelect={selectNode}
           onDragPane={handleDragPane}
+          onResizePane={handleResizePane}
           onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
           onDropFile={(file) => {
             if (file.name.toLowerCase().endsWith('.szs')) handleLoadSystemSzs([file]);
             else handleReplaceWallpaper(file);
           }}
           onOpenProjectModal={() => setIsProjectModalOpen(true)}
-          onOpenPanes={() => setActiveRailTab('panes')}
         />
 
         {activeScreen && (
-          <Inspector
-            activeScreen={activeScreen}
-            system={activeSystem}
-            selectedKey={selectedKey}
-            onEditPane={handleEditPane}
-            onRevertPane={handleRevertPane}
-          />
+          <aside className="w-[288px] shrink-0 flex flex-col bg-[var(--panel)] border-l border-[var(--border)] min-h-0">
+            <div className="flex-[3] min-h-[160px] border-b border-[var(--border)]">
+              <LayersPanel
+                scene={scene}
+                selectedId={activeSelectedId}
+                hiddenIds={hiddenIds}
+                lockedIds={lockedIds}
+                onSelect={selectNode}
+                onToggleHidden={(id) => setHiddenIds((s) => toggleIn(s, id))}
+                onToggleLocked={(id) => setLockedIds((s) => toggleIn(s, id))}
+              />
+            </div>
+            <div className="flex-[2] min-h-[200px] overflow-y-auto">
+              <Inspector activeScreen={activeScreen} system={activeSystem} selectedKey={selectedKey} onEditPane={handleEditPane} onRevertPane={handleRevertPane} />
+            </div>
+          </aside>
         )}
       </div>
-
-      {project && (
-        <ScreenTimeline
-          screens={project.screens}
-          activeScreenId={activeScreen?.id ?? ''}
-          systemLayouts={systemLayouts}
-          onSelectScreen={(id) => {
-            setActiveScreenId(id);
-            setSelectedKey(null);
-          }}
-          onAddScreen={handleAddScreen}
-        />
-      )}
 
       <ProjectModal
         isOpen={isProjectModalOpen}
@@ -319,7 +419,7 @@ export function App() {
         onInitializeProject={(p) => {
           history.reset(p);
           setActiveScreenId(p.activeScreenId);
-          setSelectedKey(null);
+          selectNode(null);
           setIsProjectModalOpen(false);
         }}
       />

@@ -2,14 +2,15 @@ import type { ScreenTarget } from '../../types/theme';
 import { parseSarc } from '../nx/sarc';
 import { parseBflyt, type BflytFile } from '../nx/bflyt';
 import { parseBntx, type BntxTexture } from '../nx/bntx';
+import type { Animation } from '../nx/bflan';
+import type { StockTexture } from '../stock/stockPack';
 import { targetFromSzsName, targetInfo } from './targets';
 import { detectFirmware, firmwareLabel } from './installerFixes';
 
 /**
- * Stock layouts come from the user's own console: NXThemes Installer's "Extract home menu"
- * page writes them (read from system storage, so an installed theme doesn't affect them) to
- * sd:/themes/systemData/extracted/{qlaunch,mypage,playerselect}/lyt/*.szs. We ask for those
- * files instead of shipping Nintendo's firmware data.
+ * Console layouts: built in (lib/stock, our own description of the stock layouts with
+ * stand-in graphics), or the user's own console files for exact textures. NXThemes Installer's
+ * "Extract home menu" writes those to sd:/themes/systemData/extracted/{qlaunch,mypage,playerselect}/lyt/*.szs.
  */
 export interface SystemLayout {
   target: ScreenTarget;
@@ -22,11 +23,13 @@ export interface SystemLayout {
   firmwareHint: string;
   /** Every file in the archive (animations included), for compatibility checks. */
   fileNames: Set<string>;
-  /** Raw .bflan files, parsed on demand to rebuild resting states. */
-  animations: Map<string, Uint8Array>;
-  /** Textures from timg/__Combined.bntx, decoded on demand. */
-  textures: Map<string, BntxTexture>;
+  /** .bflan files (raw from a console, parsed in the built-in pack), for resting states. */
+  animations: Map<string, Uint8Array | Animation>;
+  /** Textures: the console's own (timg/__Combined.bntx) or the built-in stand-ins. */
+  textures: Map<string, BntxTexture | StockTexture>;
   loadedAt: number;
+  /** 'console': the user's own .szs (exact textures). 'stock': the built-in layouts. */
+  source?: 'console' | 'stock';
 }
 
 /** Screen archives by target, plus common.szs (shared footer/header layouts) under "common". */
@@ -97,6 +100,7 @@ export function parseSystemSzs(fileName: string, bytes: Uint8Array, forcedTarget
     textures: readTextures(files.get('timg/__Combined.bntx')),
     animations: new Map([...files].filter(([n]) => n.endsWith('.bflan'))),
     loadedAt: Date.now(),
+    source: 'console',
   };
 }
 

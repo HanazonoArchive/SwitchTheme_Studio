@@ -194,6 +194,15 @@ Checked side by side against real console captures (stock Basic White and Purple
   scrim (and its title) back at the bottom of each tile. The news mask gradient also runs the
   right way now (clear at the top), and white text without a palette colour stays white.
 
+- **All Software is a list laid out by code.** The rows' positions in `FlcCntMain` are ignored on
+  the console: rows stack 20 px below the `N_Top` spacer, each as tall as its own `Size.Y`. Old
+  layouts such as Vertical OEM (made with autoDiff on an older firmware) carry row positions that
+  overlap (`L_BtnIconGame_05` only 40 px under `_04`), which broke the preview; with the list model
+  both the stock grid (first row centred at y = 274, rows 184 px apart) and Vertical OEM's taller
+  rows (centred at 324, 284 px apart) match console screenshots to a pixel. The list is clipped to
+  the area between the header and footer lines and scrolls to keep the focused row visible. With no
+  group filter, only the sort order shows at the right edge.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

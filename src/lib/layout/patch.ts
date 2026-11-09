@@ -1,4 +1,4 @@
-import type { BflytFile, BflytPane, Origin, Vec2, Vec3 } from '../nx/bflyt';
+import type { BflytFile, BflytMaterial, BflytPane, Origin, Vec2, Vec3 } from '../nx/bflyt';
 
 /**
  * layout.json model, mirroring SwitchThemesCommon/Layouts/LayoutPatches.cs.
@@ -34,15 +34,34 @@ export interface PanePatch {
   ColorTR?: string;
   ColorBL?: string;
   ColorBR?: string;
-  UsdPatches?: unknown[];
+  UsdPatches?: UsdPatch[];
   [key: string]: unknown;
+}
+
+/** User data (usd1) edit: replaces a property with the same value count, or adds it. */
+export interface UsdPatch {
+  PropName: string;
+  PropValues: string[];
+  type: number;
+}
+
+/**
+ * Material edit (SwitchThemesCommon MaterialPatch). ForegroundColor/BackgroundColor are the
+ * material's first and second colour in the file, i.e. the black and white interpolation colours.
+ */
+export interface MaterialPatch {
+  MaterialName: string;
+  ForegroundColor?: string | null;
+  BackgroundColor?: string | null;
+  Refs?: { Name: string; WrapS?: number | null; WrapT?: number | null }[] | null;
+  Transforms?: { Name: string; X?: number | null; Y?: number | null; Rotation?: number | null; ScaleX?: number | null; ScaleY?: number | null }[] | null;
 }
 
 export interface LayoutFilePatch {
   FileName: string;
   Patches?: PanePatch[];
   AddGroups?: unknown[];
-  Materials?: unknown[];
+  Materials?: MaterialPatch[];
   PushBackPanes?: string[];
   PullFrontPanes?: string[];
   [key: string]: unknown;
@@ -54,6 +73,8 @@ export interface LayoutPatch {
   TargetName?: string;
   ID?: string;
   HideOnlineBtn?: boolean;
+  /** Legacy: makes the home applet icons draw from their alpha channel only, so they take the theme's colours. */
+  PatchAppletColorAttrib?: boolean;
   TargetFirmware?: number;
   /** Obsolete pre-ID flag, still read by the installer to pick legacy fixes. */
   Ready8X?: boolean;
@@ -170,39 +191,121 @@ export function findPaneBfs(file: BflytFile, name: string): BflytPane | undefine
 
 /**
  * Returns a deep copy of the layout with patches applied to the pane tree, in order
- * (installer fixes before the theme, the theme, fixes after), like SzsPatcher does.
+ * (installer fixes before the theme, the theme, fixes after), like SzsPatcher does: pane
+ * patches, then PullFrontPanes (moved to the start of their parent = drawn first, behind) and
+ * PushBackPanes (moved to the end = drawn last, in front).
  */
 export function applyLayoutToBflyt(file: BflytFile, filePatches: LayoutFilePatch | undefined | (LayoutFilePatch | undefined)[]): BflytPane | null {
   if (!file.root) return null;
   const clone = (p: BflytPane): BflytPane => ({ ...p, children: p.children.map(clone) });
   const root = clone(file.root);
-  const layers = (Array.isArray(filePatches) ? filePatches : [filePatches]).filter((f): f is LayoutFilePatch => Boolean(f?.Patches?.length));
+  const layers = (Array.isArray(filePatches) ? filePatches : [filePatches]).filter(
+    (f): f is LayoutFilePatch => Boolean(f?.Patches?.length || f?.PullFrontPanes?.length || f?.PushBackPanes?.length),
+  );
   if (!layers.length) return root;
 
   const index = new Map<string, BflytPane>();
+  const parents = new Map<BflytPane, BflytPane>();
   const queue = [root];
   while (queue.length) {
     const p = queue.shift()!;
     if (!index.has(p.name)) index.set(p.name, p);
+    for (const c of p.children) parents.set(c, p);
     queue.push(...p.children);
   }
 
-  for (const patch of layers.flatMap((l) => l.Patches!)) {
-    const target = index.get(patch.PaneName);
-    if (!target) continue;
-    const next = applyPanePatch(stockState(target), patch);
-    target.visible = next.visible;
-    target.position = next.position;
-    target.rotation = next.rotation;
-    target.scale = next.scale;
-    target.size = next.size;
-    target.originX = next.originX;
-    target.originY = next.originY;
-    target.parentOriginX = next.parentOriginX;
-    target.parentOriginY = next.parentOriginY;
-    if (next.colors && target.kind === 'pic1') target.colors = { ...target.colors!, ...next.colors } as BflytPane['colors'];
+  for (const layer of layers) {
+    for (const patch of layer.Patches ?? []) {
+      const target = index.get(patch.PaneName);
+      if (!target) continue;
+      const next = applyPanePatch(stockState(target), patch);
+      target.visible = next.visible;
+      target.position = next.position;
+      target.rotation = next.rotation;
+      target.scale = next.scale;
+      target.size = next.size;
+      target.originX = next.originX;
+      target.originY = next.originY;
+      target.parentOriginX = next.parentOriginX;
+      target.parentOriginY = next.parentOriginY;
+      if (next.colors && target.kind === 'pic1') target.colors = { ...target.colors!, ...next.colors } as BflytPane['colors'];
+      // On text panes the same four fields are the font and shadow colours (top/bottom).
+      if (target.kind === 'txt1' && (patch.ColorTL || patch.ColorBL)) {
+        target.fontColor = patch.ColorTL ?? target.fontColor;
+        target.fontColorBottom = patch.ColorBL ?? patch.ColorTL ?? target.fontColorBottom;
+        target.fontColorPatched = true;
+      }
+      if (patch.UsdPatches?.length) Object.assign(target, applyUsdPatches(target, patch.UsdPatches));
+    }
+    const move = (name: string, front: boolean) => {
+      const p = index.get(name);
+      const parent = p && parents.get(p);
+      if (!p || !parent) return;
+      const kids = parent.children.filter((c) => c !== p);
+      parent.children = front ? [p, ...kids] : [...kids, p];
+    };
+    for (const n of layer.PullFrontPanes ?? []) move(n, true);
+    for (const n of layer.PushBackPanes ?? []) move(n, false);
   }
   return root;
+}
+
+/**
+ * usd1 edits, as the injector does them: a property with the same value count and type is
+ * replaced, a missing one is added, anything else is left alone. Only numbers are supported.
+ * Themes often add float properties (S_RoundRadius) typed as int32 holding the float's bits;
+ * qlaunch reads those bits as a float, so huge ints are reinterpreted.
+ */
+export function applyUsdPatches(pane: Pick<BflytPane, 'userData' | 'userDataTypes'>, patches: UsdPatch[]): Pick<BflytPane, 'userData' | 'userDataTypes'> {
+  const values: Record<string, number[]> = { ...(pane.userData ?? {}) };
+  const types: Record<string, number> = { ...(pane.userDataTypes ?? {}) };
+  const bits = new DataView(new ArrayBuffer(4));
+  for (const u of patches) {
+    if (u.type !== 1 && u.type !== 2) continue;
+    let nums = (u.PropValues ?? []).map((v) => (u.type === 1 ? parseInt(v, 10) : parseFloat(v)));
+    if (nums.some((v) => Number.isNaN(v))) continue;
+    const cur = values[u.PropName];
+    if (cur) {
+      if (cur.length !== nums.length || (types[u.PropName] ?? u.type) !== u.type) continue;
+    } else {
+      types[u.PropName] = u.type;
+      if (u.type === 1)
+        nums = nums.map((v) => {
+          if (Math.abs(v) < 1 << 24) return v;
+          bits.setInt32(0, v);
+          return bits.getFloat32(0);
+        });
+    }
+    values[u.PropName] = nums;
+  }
+  return { userData: values, userDataTypes: types };
+}
+
+/** Material edits for one file (ApplyMaterialsPatch): colours, texture wrap and texture transforms. */
+export function applyMaterialPatches(materials: BflytMaterial[], filePatches: (LayoutFilePatch | undefined)[]): BflytMaterial[] {
+  const patches = filePatches.flatMap((f) => f?.Materials ?? []);
+  if (!patches.length) return materials;
+  return materials.map((m) => {
+    let out = m;
+    for (const p of patches) {
+      if (p.MaterialName !== m.name) continue;
+      out = { ...out, textures: [...out.textures], transforms: [...out.transforms] };
+      if (p.ForegroundColor) out.black = p.ForegroundColor.toUpperCase();
+      if (p.BackgroundColor) out.white = p.BackgroundColor.toUpperCase();
+      for (const r of p.Refs ?? []) {
+        const i = out.textures.findIndex((t) => t.name === r.Name);
+        if (i < 0) continue;
+        out.textures[i] = { ...out.textures[i], wrapS: r.WrapS ?? out.textures[i].wrapS, wrapT: r.WrapT ?? out.textures[i].wrapT };
+      }
+      for (const t of p.Transforms ?? []) {
+        const i = out.textures.findIndex((x) => x.name === t.Name);
+        const cur = out.transforms[i];
+        if (i < 0 || !cur) continue;
+        out.transforms[i] = { x: t.X ?? cur.x, y: t.Y ?? cur.y, rotation: t.Rotation ?? cur.rotation, scaleX: t.ScaleX ?? cur.scaleX, scaleY: t.ScaleY ?? cur.scaleY };
+      }
+    }
+    return out;
+  });
 }
 
 /* -------------------------------------------------------------------------- */

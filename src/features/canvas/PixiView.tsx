@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Assets, BlurFilter, Container, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
-import type { Content, Scene, SceneNode } from '../../lib/render/scene';
+import type { Border, Content, Scene, SceneNode } from '../../lib/render/scene';
 import type { PaneVisual } from '../../lib/layout/textures';
 
 /**
@@ -148,6 +148,7 @@ function contentDisplay(content: Content, node: SceneNode, res: number, onImage:
       box.addChild(s, m);
       s.mask = m;
     }
+    if (content.border) box.addChild(borderDisplay(content.border, content.w, content.h, content.radius));
     return box;
   }
   // Console picture: texture through its material, with rounded corners, shadow and masks.
@@ -177,7 +178,18 @@ function contentDisplay(content: Content, node: SceneNode, res: number, onImage:
     inner = wrap;
   }
   box.addChild(inner);
+  if (content.border) box.addChild(borderDisplay(content.border, w, h, content.radius));
   return box;
+}
+
+/** qlaunch's border shader: a line of `size` px inside the pane's (rounded) edge. */
+function borderDisplay(b: Border, w: number, h: number, radius?: number): Graphics {
+  const s = Math.min(b.size, w / 2, h / 2);
+  const r = Math.max(0, Math.min(radius ?? 0, w / 2, h / 2) - s / 2);
+  const m = /rgba?\(([^)]+)\)/.exec(b.color);
+  const [cr, cg, cb, ca] = m ? m[1].split(',').map(Number) : [255, 255, 255, 1];
+  const color = (Math.round(cr) << 16) | (Math.round(cg) << 8) | Math.round(cb);
+  return new Graphics().roundRect(s / 2, s / 2, w - s, h - s, r).stroke({ width: s, color, alpha: ca ?? 1 });
 }
 
 function buildDisplay(node: SceneNode, hiddenIds: ReadonlySet<string>, res: number, onImage: () => void): Container {

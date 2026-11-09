@@ -1,12 +1,12 @@
 import type { BflytMaterial, BflytPane, PaneKind } from '../nx/bflyt';
 import type { LayoutPatch } from '../layout/patch';
-import { applyLayoutToBflyt, findPanePatch, paneKey } from '../layout/patch';
+import { applyLayoutToBflyt, applyMaterialPatches, findPanePatch, paneKey } from '../layout/patch';
 import { fileLayers } from '../layout/paneModel';
 import { applyRestingState, type InstanceState, type MaterialOverride } from '../layout/animState';
 import { resolvePartLayout, type SystemLayout } from '../layout/systemLayouts';
 import { flattenExtremeScales, realAnchors } from '../layout/geometry';
 import { analyseMasks, type MaskInfo } from '../layout/blend';
-import { paneVisual, parseLayoutColor, toCss, type PaneVisual } from '../layout/textures';
+import { alphaOnlyTexture, paneVisual, parseLayoutColor, toCss, type PaneVisual } from '../layout/textures';
 import { paletteColor } from '../layout/palette';
 import type { MockSystemState } from '../../types/simulation';
 import { FOCUS_PANES, FOCUSED_PART, TEXT_MOCK } from './runtimeText';
@@ -26,9 +26,15 @@ import { mul, type Mat } from './matrix';
  */
 
 export type Content =
-  | { type: 'visual'; v: PaneVisual; radius?: number; shadow?: boolean; masks?: { v: PaneVisual | null; x: number; y: number; w: number; h: number }[] }
-  | { type: 'image'; url: string; x: number; y: number; w: number; h: number; radius?: number }
+  | { type: 'visual'; v: PaneVisual; radius?: number; shadow?: boolean; border?: Border; masks?: { v: PaneVisual | null; x: number; y: number; w: number; h: number }[] }
+  | { type: 'image'; url: string; x: number; y: number; w: number; h: number; radius?: number; border?: Border }
   | { type: 'canvas'; sig: string; x: number; y: number; w: number; h: number; draw: (c: CanvasRenderingContext2D) => void };
+
+/** Outline drawn by qlaunch's shader from the pane's user data (S_Border*), inside the pane. */
+export interface Border {
+  size: number;
+  color: string;
+}
 
 export interface SceneNode {
   /** Unique per instance (a layout used 12 times has 12 subtrees). */
@@ -177,13 +183,19 @@ export interface Source {
   sys: SystemLayout;
   trees: Map<string, BflytPane | null>;
   mats: Map<string, Map<string, MaterialOverride>>;
+  /** Materials per file after the theme's material patches. */
+  materials: Map<string, BflytMaterial[]>;
+  textures: SystemLayout['textures'];
   layout: LayoutPatch;
   editable: boolean;
   masks: Map<string, MaskInfo>;
 }
 
 /** Per-file cache so a drag only re-patches the file being edited. */
-const fileCache = new WeakMap<SystemLayout, Map<string, { sig: string; tree: BflytPane | null; mats: Map<string, MaterialOverride>; masks: MaskInfo | null }>>();
+const fileCache = new WeakMap<
+  SystemLayout,
+  Map<string, { sig: string; tree: BflytPane | null; mats: Map<string, MaterialOverride>; materials: BflytMaterial[]; masks: MaskInfo | null }>
+>();
 
 function patchedFile(sys: SystemLayout, layout: LayoutPatch, name: string, editable: boolean, resting: boolean, variant: InstanceState | null) {
   const f = sys.layouts.get(name)!;
@@ -196,22 +208,42 @@ function patchedFile(sys: SystemLayout, layout: LayoutPatch, name: string, edita
   const hit = cache.get(ck);
   if (hit && hit.sig === sig) return hit;
   const tree = applyLayoutToBflyt(f, layers);
+  const materials = applyMaterialPatches(f.materials, layers ?? []);
   const mats = new Map<string, MaterialOverride>();
   if (tree && resting) applyRestingState(tree, sys, layout, name, mats, variant ?? {});
   if (tree) flattenExtremeScales(tree);
-  const entry = { sig, tree, mats, masks: tree ? analyseMasks(tree, f.materials) : null };
+  const entry = { sig, tree, mats, materials, masks: tree ? analyseMasks(tree, materials) : null };
   cache.set(ck, entry);
   return entry;
+}
+
+/** Home applet icons PatchAppletColorAttrib redirects to their alpha channel (as the installer does). */
+const APPLET_ICON_TEXTURES = ['RdtIcoPvr_00^s', 'RdtIcoNews_00^s', 'RdtIcoNews_01^s', 'RdtIcoNews_00_Home^s', 'RdtIcoNews_01_Home^s', 'RdtIcoSet^s', 'RdtIcoShop^s', 'RdtIcoCtrl_00^s', 'RdtIcoCtrl_01^s', 'RdtIcoCtrl_02^s', 'RdtIcoLR_00^s', 'RdtIcoPwrForm^s'];
+const appletCache = new WeakMap<SystemLayout, SystemLayout['textures']>();
+function appletTextures(sys: SystemLayout, layout: LayoutPatch): SystemLayout['textures'] {
+  if (!layout.PatchAppletColorAttrib || !sys.layouts.has('blyt/RdtBase.bflyt')) return sys.textures;
+  let t = appletCache.get(sys);
+  if (!t) {
+    t = new Map(sys.textures);
+    for (const n of APPLET_ICON_TEXTURES) {
+      const tex = sys.textures.get(n);
+      if (tex) t.set(n, alphaOnlyTexture(tex));
+    }
+    appletCache.set(sys, t);
+  }
+  return t;
 }
 
 export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boolean, editable: boolean): Source {
   const trees = new Map<string, BflytPane | null>();
   const masks = new Map<string, MaskInfo>();
   const mats = new Map<string, Map<string, MaterialOverride>>();
+  const materials = new Map<string, BflytMaterial[]>();
   for (const name of sys.layouts.keys()) {
     const e = patchedFile(sys, layout, name, editable, resting, null);
     trees.set(name, e.tree);
     mats.set(name, e.mats);
+    materials.set(name, e.materials);
     if (e.masks) masks.set(name, e.masks);
     if (resting && INSTANCE_LAYOUTS.has(name)) {
       for (const [suffix, state] of INSTANCE_VARIANTS) {
@@ -236,7 +268,7 @@ export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boo
       if (first && !findPanePatch(layout, 'blyt/FlcCntMain.bflyt', r.name)?.Position) r.position = { ...r.position, Y: first.position.Y - n * APPS_ROW_STEP };
     }
   }
-  return { sys, trees, mats, layout, editable, masks };
+  return { sys, trees, mats, materials, textures: appletTextures(sys, layout), layout, editable, masks };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -292,9 +324,34 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
   })();
 
   const textColor = (pane: BflytPane) => {
+    // A colour set by the theme wins over the system palette.
+    if (pane.fontColorPatched && pane.fontColor) return toCss(parseLayoutColor(pane.fontColor));
     const c = paletteColor(pane.userData?.C_W?.[0], dark);
     return c ? toCss(c) : ink;
   };
+  const borderOf = (pane: BflytPane): Border | undefined => {
+    const u = pane.userData;
+    if (!u || u.S_BorderDrawMode?.[0] !== 1) return undefined;
+    const size = u.S_BorderSize?.[0] ?? 0;
+    const volume = u.S_BorderVolume?.[0] ?? 0;
+    if (size <= 0 || volume <= 0) return undefined;
+    // Colour select 0 = the custom S_BorderColor0 (floats); otherwise a system palette index.
+    const sel = u.S_BorderColorSelect0?.[0] ?? 0;
+    const pal = sel ? paletteColor(sel, dark) : undefined;
+    const f = u.S_BorderColor0 ?? [1, 1, 1, 1];
+    const c = pal ?? ([f[0] * 255, f[1] * 255, f[2] * 255, (f[3] ?? 1) * 255] as const);
+    return { size, color: toCss([c[0], c[1], c[2], c[3] * Math.min(1, volume)]) };
+  };
+  const avatar = (pane: BflytPane, url: string, w: number, h: number, round: boolean): Extract<Content, { type: 'image' }> => ({
+    type: 'image',
+    url,
+    x: 0,
+    y: 0,
+    w,
+    h,
+    radius: round ? Math.min(w, h) / 2 : (pane.userData?.S_RoundRadius?.[0] ?? 0) || undefined,
+    border: borderOf(pane),
+  });
   const fontSize = (pane: BflytPane, fallback: number) => (pane.fontSize?.Y ?? fallback) * 0.85;
 
   const dynamicText = (ctx: Ctx, name: string): string | undefined => {
@@ -331,9 +388,11 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
         return canvasContent('changeuser', w / 2 - 14, h / 2 - 14, 160, 28, (c) => draw.glyphLabel(c, 0, 14, 'Y', 'Change User', 18, 20, CURSOR, '#fff', CURSOR));
       }
       if (pane.name === 'P_Pict' && BUTTON_GLYPH[ctx.file]) return null;
-      if (pane.name === 'P_Account_00' && ctx.variant.includes('r') && mock.users[0]) {
-        const u = mock.users[0];
-        return canvasContent(`av-ring|${u.avatarBg}|${u.avatarIcon}|${w}`, -2, -2, w + 4, h + 4, (c) => draw.avatar(c, 2, 2, w, h, u.avatarBg, u.avatarIcon, true, true));
+      // "Playing" badge: the users playing the suspended game (User_00 shows the first slot).
+      const playing = /^P_Account_0(\d)$/.exec(pane.name);
+      if (playing && (ctx.file === ICON_LAYOUT || ctx.file === 'blyt/FlcBtnIconGame.bflyt' || ctx.file === 'blyt/EntBtnResumeGame.bflyt')) {
+        const u = mock.users[parseInt(playing[1], 10)];
+        if (u) return avatar(pane, u.avatarUrl, w, h, true);
       }
       if (pane.name === 'P_CtrlDummy' && ctx.file === 'blyt/FooterCtrl.bflyt') {
         const col = textColor(pane);
@@ -341,7 +400,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       }
       if (pane.name === 'P_Icon' && (ctx.file === 'blyt/TextH1Ex.bflyt' || ctx.file === 'blyt/TextH1.bflyt')) {
         const u = mock.users[0];
-        if (target === 'user' && u) return canvasContent(`av|${u.avatarBg}|${u.avatarIcon}|${w}`, 0, 0, w, h, (c) => draw.avatar(c, 0, 0, w, h, u.avatarBg, u.avatarIcon, true, false));
+        if (target === 'user' && u) return avatar(pane, u.avatarUrl, w, h, true);
         if (target === 'set') return canvasContent(`gear|${ink}|${w}`, 0, 0, w, h, (c) => draw.gearIcon(c, w, h, ink));
         return null;
       }
@@ -358,12 +417,11 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
         if (g) return image(g.coverUrl, w, h);
       }
       if (pane.name === 'P_Image' && ctx.file === 'blyt/MypBtnUserIcon.bflyt' && mock.users[0]) {
-        const u = mock.users[0];
-        return canvasContent(`avsq|${u.avatarBg}|${u.avatarIcon}|${w}`, 0, 0, w, h, (c) => draw.avatar(c, 0, 0, w, h, u.avatarBg, u.avatarIcon, false, false));
+        return avatar(pane, mock.users[0].avatarUrl, w, h, false);
       }
       if (pane.name === 'P_PlayerImage' && ctx.file === 'blyt/PslBtnCardPlayer.bflyt') {
         const u = mock.users[partIndex(ctx.part)];
-        if (u) return canvasContent(`avsq|${u.avatarBg}|${u.avatarIcon}|${w}`, 0, 0, w, h, (c) => draw.avatar(c, 0, 0, w, h, u.avatarBg, u.avatarIcon, false, false));
+        if (u) return avatar(pane, u.avatarUrl, w, h, false);
       }
       if (pane.name === 'P_Image' && ctx.file === 'blyt/EntBtnResumeGame.bflyt') {
         const g = game(selectedGame);
@@ -371,27 +429,31 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       }
       if (pane.name === 'P_PictBase' && ctx.accountIndex !== null) {
         const u = mock.users[ctx.accountIndex];
-        if (u) return canvasContent(`av-ring|${u.avatarBg}|${u.avatarIcon}|${w}`, -2, -2, w + 4, h + 4, (c) => draw.avatar(c, 2, 2, w, h, u.avatarBg, u.avatarIcon, true, true));
+        // Account buttons: the picture with qlaunch's white ring.
+        if (u) return { ...avatar(pane, u.avatarUrl, w, h, true), border: borderOf(pane) ?? { size: 3, color: 'rgba(255,255,255,1)' } };
       }
       if (STATE_PANE.test(pane.name)) return null;
       const mi = ctx.src.masks.get(ctx.file);
       if (mi && (mi.alphaOnly.has(pane.name) || mi.hiddenTargets.has(pane.name))) return null;
-      const file = ctx.src.sys.layouts.get(ctx.file);
-      const mat = file?.materials[pane.materialIndex ?? -1];
-      const v = paneVisual(pane, mat ? withOverride(mat, ctx.src.mats.get(ctx.file + ctx.variant)?.get(mat.name)) : undefined, ctx.src.sys.textures, w, h, dark);
+      const fileMats = ctx.src.materials.get(ctx.file);
+      const mat = fileMats?.[pane.materialIndex ?? -1];
+      const v = paneVisual(pane, mat ? withOverride(mat, ctx.src.mats.get(ctx.file + ctx.variant)?.get(mat.name)) : undefined, ctx.src.textures, w, h, dark);
       if (!v || v.unsupported) return null;
       const layers = mi?.masked.get(pane.name)?.map((l) => {
         const lw = l.pane.size.X * l.pane.scale.X;
         const lh = l.pane.size.Y * l.pane.scale.Y;
-        const lm = file?.materials[l.pane.materialIndex ?? -1];
-        return { v: lm ? paneVisual(l.pane, lm, ctx.src.sys.textures, lw, lh, dark) : null, x: l.dx, y: l.dy, w: lw, h: lh };
+        const lm = fileMats?.[l.pane.materialIndex ?? -1];
+        return { v: lm ? paneVisual(l.pane, lm, ctx.src.textures, lw, lh, dark) : null, x: l.dx, y: l.dy, w: lw, h: lh };
       });
-      return { type: 'visual', v, radius: rr, shadow: pane.userData?.S_DropShadowDrawMode?.[0] === 1 && !dark, masks: layers };
+      return { type: 'visual', v, radius: rr, shadow: pane.userData?.S_DropShadowDrawMode?.[0] === 1 && !dark, border: borderOf(pane), masks: layers };
     }
 
     // Focused screen element (settings entry) or the focused game icon (its FocusKey variant).
     if (pane.name === 'N_BtnFocusKey' && (FOCUSED_PART[target] === ctx.part || ctx.variant.includes('f'))) {
-      return canvasContent(`cursor|${w}x${h}`, -14, -14, w + 28, h + 28, (c) => draw.cursor(c, 14, 14, w, h, CURSOR));
+      // The cursor follows the rounded corners of what it frames (a theme rounding the icons).
+      const framed = ['P_IconGame', 'P_PictBase'].map((n) => ctx.src.trees.get(ctx.file + ctx.variant) && findChild(ctx.src.trees.get(ctx.file + ctx.variant)!, n)).find(Boolean);
+      const r = Math.min(framed?.userData?.S_RoundRadius?.[0] ?? 0, Math.min(w, h) / 2);
+      return canvasContent(`cursor|${w}x${h}|${r}`, -14, -14, w + 28, h + 28, (c) => draw.cursor(c, 14, 14, w, h, CURSOR, r));
     }
 
     if (pane.kind === 'pan1' && ctx.file === 'blyt/Hud.bflyt' && (pane.name === 'N_Time' || pane.name === 'N_BatteryNum')) {
@@ -401,7 +463,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       return canvasContent(`hud|${text}|${ink}`, w - tw, h / 2 - size, tw, size * 2, (c) => draw.text(c, text, tw, size * 2, size, ink, 'right'));
     }
 
-    if (pane.name === 'N_Tip' && (ctx.file === ICON_LAYOUT || ctx.file === 'blyt/FlcBtnIconGame.bflyt') && ctx.iconIndex === selectedGame) {
+    // The title balloon (hidden when the theme hides its L_Balloon part).
+    if (pane.name === 'N_Tip' && (ctx.file === ICON_LAYOUT || ctx.file === 'blyt/FlcBtnIconGame.bflyt') && ctx.iconIndex === selectedGame && findChild(pane, 'L_Balloon')?.visible !== false) {
       const g = game(selectedGame);
       if (g) {
         const plate = ctx.file === 'blyt/FlcBtnIconGame.bflyt';
@@ -449,8 +512,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       if (tintFrom) {
         const fileData = ctx.src.sys.layouts.get(ctx.file);
         const tp = fileData?.byName.get(tintFrom);
-        const mat = tp && fileData?.materials[tp.materialIndex ?? -1];
-        const v = tp && mat ? paneVisual(tp, mat, ctx.src.sys.textures, 1, 1, dark) : null;
+        const mat = tp && ctx.src.materials.get(ctx.file)?.[tp.materialIndex ?? -1];
+        const v = tp && mat ? paneVisual(tp, mat, ctx.src.textures, 1, 1, dark) : null;
         if (v?.color) color = v.color;
       }
       const paragraph = text.length > 60;
@@ -481,9 +544,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
         ? pslSlotX(mock.users.length, mock.users.length) - 30
         : null;
     const posX = pslX ?? pane.position.X;
-    const runningAvatar = pane.name === 'P_Account_00' && ctx.variant.includes('r');
     const hiddenOnConsole = pane.visible === false;
-    const hidden = runningAvatar ? false : (runtimeVisible ?? pane.visible) === false || pane.scale.X === 0 || pane.scale.Y === 0;
+    const hidden = (runtimeVisible ?? pane.visible) === false || pane.scale.X === 0 || pane.scale.Y === 0;
 
     const m = ctx.magnify;
     const w = pane.partsMagnify === 'ignore' ? pane.size.X : pane.size.X * m.x;
@@ -584,8 +646,21 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const own = !hidden && !replacesChildren(pane, ctx) ? pane.children.map((c) => node(c, pane.size.X, pane.size.Y, childCtx, childWorld, id)).filter((n): n is SceneNode => !!n) : [];
     // Hidden panes still list their children (undrawn) so they can be found in the layers panel.
     const hiddenKids = hidden ? pane.children.map((c) => hiddenNode(c, ctx, id, childWorld)) : [];
-    self.children = [...before, ...own, ...hiddenKids, ...after];
+    self.children = [...before, ...focusLast(own, pane, ctx), ...hiddenKids, ...after];
     return self;
+  };
+
+  /**
+   * qlaunch draws the focused game above its neighbours (so a theme that enlarges it on focus
+   * overlaps the others, not the other way round): the slot holding it goes last in its row,
+   * and on All Software its row goes last among the rows.
+   */
+  const holdsFocus = (n: SceneNode): boolean => n.gameIndex === selectedGame || n.children.some(holdsFocus);
+  const focusLast = (kids: SceneNode[], pane: BflytPane, ctx: Ctx): SceneNode[] => {
+    const slot = ctx.file === 'blyt/RdtBase.bflyt' ? /^N_Icon_\d+$/ : ctx.file === 'blyt/FlcBtnIconGameBlock.bflyt' ? /^N_BtnIconGame_\d+$/ : ctx.file === 'blyt/FlcCntMain.bflyt' ? /^L_BtnIconGame_\d+$/ : null;
+    if (!slot || !pane.children.length) return kids;
+    const i = kids.findIndex((k) => slot.test(k.name) && holdsFocus(k));
+    return i < 0 || i === kids.length - 1 ? kids : [...kids.slice(0, i), ...kids.slice(i + 1), kids[i]];
   };
 
   /** A hidden pane's subtree, for the layers panel only. */

@@ -18,6 +18,7 @@ import { FW, stampFirmware, themeTargetFirmware } from '../../lib/layout/install
 import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
+import { UsersEditor } from './UsersEditor';
 
 interface LeftDrawerProps {
   activeTab: RailTab;
@@ -633,6 +634,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 </button>
               </div>
             </div>
+
+            <UsersEditor users={mockState.users} onChange={(users) => onUpdateMockState({ users })} />
 
             {/* Games Carousel Management */}
             <div className="bg-[var(--panel-2)] rounded-lg p-3 border border-[var(--border)] space-y-3">

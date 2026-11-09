@@ -48,6 +48,13 @@ an `.nxtheme`, reopen a recent theme, or try an example. Themes are saved in you
   The eye and lock only affect the editor. Hiding a pane *in the theme* is the eye in the Inspector.
 - **Preview** (top): use the screen like the console: click a game or use the arrow keys to move focus.
 
+## layout.json support
+
+The preview applies everything the installer (SwitchThemesCommon) applies: pane patches (position,
+rotation, scale, size, visibility, origins, colours, user data), material patches, `PullFrontPanes`
+/ `PushBackPanes`, `PatchAppletColorAttrib`, and the theme's animations (as their resting state).
+The Console tab sets the preview's users, games, clock, battery and Basic White / Black.
+
 ## Theme kinds
 
 - **Custom image**: ships `image.jpg` (1280×720, baseline) or a DXT1 `image.dds`.

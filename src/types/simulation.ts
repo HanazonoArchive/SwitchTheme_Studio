@@ -1,8 +1,8 @@
 export interface MockUser {
   id: string;
   name: string;
-  avatarBg: string;
-  avatarIcon: string;
+  /** Profile picture: one of the built-in pictures (/avatars/*.svg) or an uploaded image. */
+  avatarUrl: string;
 }
 
 export interface MockGame {

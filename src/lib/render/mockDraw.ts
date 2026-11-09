@@ -117,34 +117,14 @@ export function hints(c: CanvasRenderingContext2D, items: [string, string][], si
   });
 }
 
-export function avatar(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, bg: string, icon: string, round: boolean, ring: boolean) {
-  c.save();
-  c.beginPath();
-  if (round) c.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
-  else c.roundRect(x, y, w, h, Math.min(w, h) * 0.06);
-  c.fillStyle = bg;
-  c.fill();
-  if (ring) {
-    c.lineWidth = 2;
-    c.strokeStyle = 'rgba(255,255,255,0.9)';
-    c.stroke();
-  }
-  c.clip();
-  c.font = `${Math.min(w, h) * 0.5}px ${FONT}`;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(icon, x + w / 2, y + h / 2 + Math.min(w, h) * 0.04);
-  c.restore();
-}
-
-export function cursor(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
+export function cursor(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, radius = 0) {
   c.save();
   c.shadowColor = color;
   c.shadowBlur = 10;
   c.strokeStyle = color;
   c.lineWidth = 5;
   c.beginPath();
-  c.roundRect(x - 2.5, y - 2.5, w + 5, h + 5, 6);
+  c.roundRect(x - 2.5, y - 2.5, w + 5, h + 5, Math.max(6, radius + 2.5));
   c.stroke();
   c.restore();
 }

@@ -42,6 +42,8 @@ const PER_LAYOUT: Record<string, Step[]> = {
 /** Shown or hidden by code rather than animations; hidden in the idle preview. */
 export const RUNTIME_HIDDEN: Record<string, string[]> = {
   'blyt/RdtBase.bflyt': ['L_ChildLock'],
+  // Account buttons: the friend-request and error badges only show when there is one.
+  'blyt/RdtBtnMyPage.bflyt': ['L_New', 'L_Error'],
   // Wireless toggles are only listed while flight mode is on.
   // Header shows either a plain title (N_Text) or a game's data (N_Data).
   'blyt/TextH1Ex.bflyt': ['N_Data'],
@@ -124,7 +126,8 @@ export function restingAnimations(sys: SystemLayout, layoutFile: string, state: 
   }
   if (state.running) {
     steps = steps.filter(([n]) => n !== 'SuspendOut');
-    steps.push(['SuspendIn', 'end'], ['SuspendText', 'end']);
+    // User_00: one player on the suspended game: their picture shows, the pill moves right of it.
+    steps.push(['SuspendIn', 'end'], ['SuspendText', 'end'], ['User_00', 'end']);
   }
   // Popup balloons are closed when idle.
   if (/Balloon/.test(base)) steps.push(['Out', 'end']);

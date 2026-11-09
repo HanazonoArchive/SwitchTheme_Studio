@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Upload, Download, Eye, EyeOff, Plus, Trash2, Clock, Battery, Wifi, Cpu, Search, RotateCcw, AlertTriangle, ImageOff, Image as ImageIcon, Check, Wrench } from 'lucide-react';
+import { Upload, Download, Eye, EyeOff, Plus, Trash2, Clock, Cpu, Search, RotateCcw, AlertTriangle, ImageOff, Image as ImageIcon, Check, Wrench } from 'lucide-react';
 export type RailTab = 'media' | 'panes' | 'mock' | 'json';
 const TABS: { id: RailTab; label: string }[] = [
   { id: 'media', label: 'Background' },
@@ -18,6 +18,7 @@ import { FW, stampFirmware, themeTargetFirmware } from '../../lib/layout/install
 import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
+import { UsersEditor } from './UsersEditor';
 
 interface LeftDrawerProps {
   activeTab: RailTab;
@@ -526,7 +527,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
 
         {activeTab === 'mock' && (
           <div className="space-y-4">
-            {/* Clock & Battery (Supports Wheel & Arrow Keys) */}
+            {/* Clock (wheel or arrow keys adjust it) */}
             <div className="bg-[var(--panel-2)] rounded-lg p-3 border border-[var(--border)] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[12px] text-[var(--text-2)] flex items-center gap-1.5">
@@ -544,63 +545,6 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 />
               </div>
 
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[12px] text-[var(--text-2)]">
-                  <span className="flex items-center gap-1.5">
-                    <Battery className="w-3.5 h-3.5 text-emerald-400" />
-                    Battery
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[var(--text)]">{mockState.battery}%</span>
-                    <button
-                      onClick={() => onUpdateMockState({ isCharging: !mockState.isCharging })}
-                      className="text-[12px] text-[var(--text-2)] hover:text-[var(--text)]"
-                    >
-                      {mockState.isCharging ? '⚡' : 'Plug'}
-                    </button>
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={mockState.battery}
-                  onWheel={(e) => {
-                    e.preventDefault();
-                    const delta = e.deltaY < 0 ? 2 : -2;
-                    onUpdateMockState({
-                      battery: Math.max(0, Math.min(100, mockState.battery + delta)),
-                    });
-                  }}
-                  onChange={(e) => onUpdateMockState({ battery: parseInt(e.target.value) })}
-                  className="w-full accent-[var(--accent)] cursor-pointer"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[12px] text-[var(--text-2)]">
-                  <span className="flex items-center gap-1.5">
-                    <Wifi className="w-3.5 h-3.5 text-blue-400" />
-                    Wi-Fi Strength
-                  </span>
-                  <span className="font-mono text-[var(--text)]">{mockState.wifiStrength} / 3</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="3"
-                  value={mockState.wifiStrength}
-                  onWheel={(e) => {
-                    e.preventDefault();
-                    const delta = e.deltaY < 0 ? 1 : -1;
-                    onUpdateMockState({
-                      wifiStrength: Math.max(0, Math.min(3, mockState.wifiStrength + delta)),
-                    });
-                  }}
-                  onChange={(e) => onUpdateMockState({ wifiStrength: parseInt(e.target.value) })}
-                  className="w-full accent-[var(--accent)] cursor-pointer"
-                />
-              </div>
             </div>
 
             {/* Switch Stock Background Theme Toggle */}
@@ -633,6 +577,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 </button>
               </div>
             </div>
+
+            <UsersEditor users={mockState.users} onChange={(users) => onUpdateMockState({ users })} />
 
             {/* Games Carousel Management */}
             <div className="bg-[var(--panel-2)] rounded-lg p-3 border border-[var(--border)] space-y-3">

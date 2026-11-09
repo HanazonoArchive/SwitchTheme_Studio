@@ -42,7 +42,7 @@ export interface StockArchive {
 
 /** Animations the preview's idle / focus / running recipes use (see animState.ts). */
 const USED_ANIMS =
-  /_(In|UnFocusKey|UnfocusKey|UnFocusTouch|Inactive|DlOut|SuspendOut|PromoOut|CardOut|CardStatusOut|DigitalBundleOut|EffectLaunchOut|Enter|RefreshIn|BtnChangeUserIn|MyPage|BaseOut|LockMainOut|SpecialNewsTextOut|ContentsIn|Out|FocusKey|Active|SuspendIn|SuspendText)\.bflan$/;
+  /_(In|UnFocusKey|UnfocusKey|UnFocusTouch|Inactive|DlOut|SuspendOut|PromoOut|CardOut|CardStatusOut|DigitalBundleOut|EffectLaunchOut|Enter|RefreshIn|BtnChangeUserIn|MyPage|BaseOut|LockMainOut|SpecialNewsTextOut|ContentsIn|Out|FocusKey|Active|SuspendIn|SuspendText|User_00)\.bflan$/;
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 

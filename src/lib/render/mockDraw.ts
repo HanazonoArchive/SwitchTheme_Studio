@@ -117,34 +117,49 @@ export function hints(c: CanvasRenderingContext2D, items: [string, string][], si
   });
 }
 
-export function avatar(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, bg: string, icon: string, round: boolean, ring: boolean) {
-  c.save();
-  c.beginPath();
-  if (round) c.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
-  else c.roundRect(x, y, w, h, Math.min(w, h) * 0.06);
-  c.fillStyle = bg;
-  c.fill();
-  if (ring) {
-    c.lineWidth = 2;
-    c.strokeStyle = 'rgba(255,255,255,0.9)';
-    c.stroke();
+/**
+ * One status-bar glyph (digit, ':' or '%') filling its glyph cell like the console's font
+ * textures: digits are 20 px tall in a 24 px cell, 12 px wide in 14.
+ */
+export function hudGlyph(c: CanvasRenderingContext2D, ch: string, w: number, h: number, color: string) {
+  c.fillStyle = color;
+  if (ch === ':') {
+    const r = Math.min(w, h) * 0.26;
+    for (const y of [h * 0.36, h * 0.68]) {
+      c.beginPath();
+      c.arc(w / 2, y, r, 0, Math.PI * 2);
+      c.fill();
+    }
+    return;
   }
-  c.clip();
-  c.font = `${Math.min(w, h) * 0.5}px ${FONT}`;
+  const isDigit = ch >= '0' && ch <= '9';
+  const targetH = isDigit ? h * (20 / 24) : h * 0.86;
+  const targetW = isDigit ? w * (12 / 14) : w * 0.9;
+  c.font = font(100, 500);
   c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(icon, x + w / 2, y + h / 2 + Math.min(w, h) * 0.04);
+  c.textBaseline = 'alphabetic';
+  const m = c.measureText(ch);
+  const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || 72;
+  const gw = m.actualBoundingBoxRight + m.actualBoundingBoxLeft || 55;
+  const k = Math.min(targetH / gh, (targetW / gw) * 1.15);
+  c.save();
+  c.translate(w / 2, h / 2);
+  // Condense a little when the font's digit is wider than the cell.
+  const sx = Math.min(1, targetW / (gw * k));
+  c.scale(k * sx, k);
+  // Centre the ink, not the advance box.
+  c.fillText(ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
   c.restore();
 }
 
-export function cursor(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
+export function cursor(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, radius = 0) {
   c.save();
   c.shadowColor = color;
   c.shadowBlur = 10;
   c.strokeStyle = color;
   c.lineWidth = 5;
   c.beginPath();
-  c.roundRect(x - 2.5, y - 2.5, w + 5, h + 5, 6);
+  c.roundRect(x - 2.5, y - 2.5, w + 5, h + 5, Math.max(6, radius + 2.5));
   c.stroke();
   c.restore();
 }

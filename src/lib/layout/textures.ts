@@ -67,6 +67,14 @@ export interface PaneVisual {
   unsupported?: string;
 }
 
+/** Textures read through their alpha channel only (see PatchAppletColorAttrib), keyed by the wrapper. */
+const ALPHA_ONLY = new WeakMap<BntxTexture | StockTexture, BntxTexture | StockTexture>();
+export function alphaOnlyTexture<T extends BntxTexture | StockTexture>(tex: T): T {
+  const wrapper = { ...tex };
+  ALPHA_ONLY.set(wrapper, tex);
+  return wrapper;
+}
+
 export function paneVisual(
   pane: BflytPane,
   material: BflytMaterial | undefined,
@@ -94,13 +102,25 @@ export function paneVisual(
     return c[3] < 2 ? null : { color: toCss(c) };
   }
 
-  if (!decoded.has(tex)) decoded.set(tex, 'stock' in tex ? renderStockTexture(tex) : decodeTexture(tex));
+  if (!decoded.has(tex)) {
+    const base = ALPHA_ONLY.get(tex) ?? tex;
+    let img = 'stock' in base ? renderStockTexture(base) : decodeTexture(base);
+    if (img && base !== tex) {
+      // Channel swizzle (A, A, A, A): the picture becomes a white silhouette the material colours.
+      const data = new Uint8ClampedArray(img.data);
+      for (let i = 0; i < data.length; i += 4) data[i] = data[i + 1] = data[i + 2] = data[i + 3];
+      img = { ...img, data };
+    }
+    decoded.set(tex, img);
+  }
   const img = decoded.get(tex);
   if (!img) return { unsupported: ref.name };
 
   if (img.width * img.height === 1) {
     const t = img.data;
-    const c = mul([0, 1, 2, 3].map((i) => black[i] + ((white[i] - black[i]) * t[i]) / 255) as Rgba);
+    // A translucent 1x1 (e.g. White1x1A220 under the "Playing" pill) is a scrim: keep its colours.
+    const [b0, w0] = t[3] < 250 ? [cb ?? parseLayoutColor(material.black), cw ? white : matWhite] : [black, white];
+    const c = mul([0, 1, 2, 3].map((i) => b0[i] + ((w0[i] - b0[i]) * t[i]) / 255) as Rgba);
     return c[3] < 2 ? null : { color: toCss(c) };
   }
 
@@ -129,7 +149,7 @@ export function paneVisual(
   const mirrorX = isMirror(ref.wrapS) && outside(u0, u1);
   const mirrorY = isMirror(ref.wrapT) && outside(v0, v1);
 
-  const key = `${ref.name}|${black.join(',')}|${white.join(',')}|${vertex.join(',')}|${mirrorX}|${mirrorY}`;
+  const key = `${ref.name}${ALPHA_ONLY.has(tex) ? '#a' : ''}|${black.join(',')}|${white.join(',')}|${vertex.join(',')}|${mirrorX}|${mirrorY}`;
   let canvas = canvasCache.get(key);
   if (!canvas) {
     const W = img.width * (mirrorX ? 2 : 1);

@@ -1,9 +1,12 @@
 import type { MockUser, MockGame } from '../types/simulation';
 
 export const DEFAULT_MOCK_USERS: MockUser[] = [
-  { id: 'user-1', name: 'User 1', avatarBg: '#e11d48', avatarIcon: '🍄' },
-  { id: 'user-2', name: 'User 2', avatarBg: '#2563eb', avatarIcon: '⚔️' },
+  { id: 'user-1', name: 'User 1', avatarUrl: '/avatars/octopus.svg' },
+  { id: 'user-2', name: 'User 2', avatarUrl: '/avatars/knight.svg' },
 ];
+
+/** Built-in profile pictures: our own drawings in the console's style (character on a coloured backdrop). */
+export const BUILTIN_AVATARS = ['octopus', 'knight', 'fox', 'cat', 'frog', 'robot', 'bird', 'bear'].map((n) => `/avatars/${n}.svg`);
 
 export const DEFAULT_MOCK_GAMES: MockGame[] = [
   {

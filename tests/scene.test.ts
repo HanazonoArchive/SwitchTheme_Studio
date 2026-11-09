@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BflytFile, BflytPane } from '../src/lib/nx/bflyt';
 import type { SystemLayout } from '../src/lib/layout/systemLayouts';
 import { buildScene, buildSource } from '../src/lib/render/scene';
+import { applyLayoutToBflyt, applyMaterialPatches, applyUsdPatches } from '../src/lib/layout/patch';
 import { bounds, quad } from '../src/lib/render/matrix';
 import { classifyTexture, systemLayoutFromStock, toStockArchive } from '../src/lib/stock/stockPack';
 import { DEFAULT_MOCK_GAMES, DEFAULT_MOCK_USERS } from '../src/constants/switchPanes';
@@ -34,9 +35,6 @@ const file = (root: BflytPane): BflytFile => {
 
 const mock: MockSystemState = {
   time: '12:00',
-  battery: 85,
-  isCharging: false,
-  wifiStrength: 3,
   users: DEFAULT_MOCK_USERS,
   games: DEFAULT_MOCK_GAMES,
   selectedGameIndex: 0,
@@ -84,6 +82,40 @@ describe('scene', () => {
     expect(h.hidden).toBe(true);
     expect(h.hiddenOnConsole).toBe(true);
     expect(scene.flat.find((x) => x.name === 'P_Inside')?.hidden).toBe(true);
+  });
+});
+
+describe('injector patch features', () => {
+  const tree = () => file(pane('RootPane', {}, [pane('A'), pane('B'), pane('C'), pane('T_Text', { kind: 'txt1', fontColor: 'FF323232' })]));
+
+  it('reorders panes like PullFrontPanes / PushBackPanes (start = drawn first)', () => {
+    const r = applyLayoutToBflyt(tree(), { FileName: 'x', PullFrontPanes: ['C'], PushBackPanes: ['A'] })!;
+    expect(r.children.map((c) => c.name)).toEqual(['C', 'B', 'T_Text', 'A']);
+  });
+
+  it('applies ColorTL/ColorBL to text panes as font colours', () => {
+    const r = applyLayoutToBflyt(tree(), { FileName: 'x', Patches: [{ PaneName: 'T_Text', ColorTL: 'FF0000FF' }] })!;
+    const t = r.children.find((c) => c.name === 'T_Text')!;
+    expect(t.fontColor).toBe('FF0000FF');
+    expect(t.fontColorPatched).toBe(true);
+  });
+
+  it('patches user data like the injector (same type replaces, missing is added, float bits)', () => {
+    const p = { userData: { S_RoundRadius: [10] }, userDataTypes: { S_RoundRadius: 2 } };
+    expect(applyUsdPatches(p, [{ PropName: 'S_RoundRadius', PropValues: ['5'], type: 1 }]).userData!.S_RoundRadius).toEqual([10]);
+    expect(applyUsdPatches(p, [{ PropName: 'S_RoundRadius', PropValues: ['5'], type: 2 }]).userData!.S_RoundRadius).toEqual([5]);
+    // 1106247680 = 0x41F00000 = 30.0f, as Purple Skies writes S_RoundRadius.
+    expect(applyUsdPatches({}, [{ PropName: 'S_RoundRadius', PropValues: ['1106247680'], type: 1 }]).userData!.S_RoundRadius).toEqual([30]);
+  });
+
+  it('applies material colours, wrap and texture transforms', () => {
+    const m = { name: 'M', black: '00000000', white: 'FFFFFFFF', textures: [{ name: 'T^s', wrapS: 0, wrapT: 0 }], transforms: [{ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }] };
+    const [out] = applyMaterialPatches([m], [{ FileName: 'x', Materials: [{ MaterialName: 'M', BackgroundColor: 'ff00ff00', Refs: [{ Name: 'T^s', WrapS: 1 }], Transforms: [{ Name: 'T^s', ScaleX: 2 }] }] }]);
+    expect(out.white).toBe('FF00FF00');
+    expect(out.black).toBe('00000000');
+    expect(out.textures[0].wrapS).toBe(1);
+    expect(out.transforms[0].scaleX).toBe(2);
+    expect(m.white).toBe('FFFFFFFF');
   });
 });
 

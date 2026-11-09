@@ -40,6 +40,9 @@ export interface BflytPane {
   /** txt1 */
   text?: string;
   fontColor?: string;
+  fontColorBottom?: string;
+  /** Set when a theme changed the text colour (layout.json ColorTL/ColorBL on a txt1). */
+  fontColorPatched?: boolean;
   fontSize?: Vec2;
   textAlignX?: Origin;
   textAlignY?: Origin;
@@ -52,6 +55,8 @@ export interface BflytPane {
   uv?: [Vec2, Vec2, Vec2, Vec2];
   /** usd1 user data (e.g. S_RoundRadius, S_BorderSize), numbers only. */
   userData?: Record<string, number[]>;
+  /** usd1 value type per property: 1 int32, 2 float (layout.json UsdPatch.type). */
+  userDataTypes?: Record<string, number>;
   /** prt1: name of the layout this part instantiates (without blyt/ and extension). */
   partName?: string;
   partScale?: Vec2;
@@ -157,8 +162,9 @@ function readMaterials(r: BinaryReader, start: number, version: number, textures
 }
 
 /** usd1: numeric user properties (strings are skipped). */
-function readUserData(r: BinaryReader, start: number): Record<string, number[]> {
+function readUserData(r: BinaryReader, start: number): { values: Record<string, number[]>; types: Record<string, number> } {
   const out: Record<string, number[]> = {};
+  const types: Record<string, number> = {};
   r.seek(start + 8);
   const count = r.u16();
   r.u16();
@@ -175,10 +181,11 @@ function readUserData(r: BinaryReader, start: number): Record<string, number[]> 
     if (type === 1 || type === 2) {
       r.seek(entry + dataOff);
       out[name] = Array.from({ length: len }, () => (type === 1 ? r.i32() : r.f32()));
+      types[name] = type;
     }
     r.seek(next);
   }
-  return out;
+  return { values: out, types };
 }
 
 const PANE_KINDS = new Set(['pan1', 'pic1', 'txt1', 'wnd1', 'bnd1', 'prt1']);
@@ -263,7 +270,7 @@ function readPane(r: BinaryReader, kind: PaneKind, sectionStart: number, section
       r.f32(); // italic
       const textOffset = r.u32();
       pane.fontColor = colorString(r);
-      colorString(r);
+      pane.fontColorBottom = colorString(r);
       pane.fontSize = { X: r.f32(), Y: r.f32() };
       if (textOffset !== 0 && textLength > 0 && sectionStart + textOffset + textLength <= sectionEnd) {
         const bytes = r.slice(sectionStart + textOffset, sectionStart + textOffset + textLength);
@@ -343,7 +350,9 @@ export function parseBflyt(data: Uint8Array): BflytFile {
     } else if (magic === 'usd1') {
       if (lastPane) {
         try {
-          lastPane.userData = readUserData(r, off);
+          const u = readUserData(r, off);
+          lastPane.userData = u.values;
+          lastPane.userDataTypes = u.types;
         } catch {
           /* ignore */
         }

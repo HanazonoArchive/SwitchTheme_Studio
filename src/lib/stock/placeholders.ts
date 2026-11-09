@@ -51,9 +51,16 @@ const DRAWINGS: Record<string, Draw> = {
   'EntIcoNews_01^t': (c, w, h) => fill(c, () => c.rect(0, 0, w * 0.92, h)),
   'RdtIcoNews_01_Home^s': (c, w, h) => fill(c, () => c.rect(0, 0, w, h)),
   'IcoArwSimpleU_32^t': (c, w, h) => stroke(c, w * 0.09, () => (c.moveTo(w * 0.15, h * 0.68), c.lineTo(w / 2, h * 0.32), c.lineTo(w * 0.85, h * 0.68))),
+  // Battery outline: 3 px frame (33 x 20) and the terminal nub on the right.
   'IcoBattM_64^s': (c, w, h) => {
-    stroke(c, h * 0.12, () => c.roundRect(h * 0.08, h * 0.08, w * 0.86, h * 0.84, h * 0.12));
-    fill(c, () => c.rect(w * 0.94, h * 0.32, w * 0.06, h * 0.36));
+    const t = h * 0.15;
+    const bw = w * (33 / 36);
+    fill(c, () => {
+      c.rect(0, 0, bw, h);
+      c.rect(bw, h * 0.35, w - bw, h * 0.3);
+    });
+    c.globalCompositeOperation = 'destination-out';
+    fill(c, () => c.rect(t, t, bw - 2 * t, h - 2 * t));
   },
   'IcoBtnPlusRev_24^s': (c, w, h) => {
     fill(c, () => c.arc(w / 2, h / 2, w * 0.46, 0, Math.PI * 2));
@@ -71,11 +78,21 @@ const DRAWINGS: Record<string, Draw> = {
     fill(c, () => c.rect(-w * 0.1, -h * 0.34, w * 0.2, h * 0.5));
     fill(c, () => (c.moveTo(-w * 0.1, h * 0.2), c.lineTo(w * 0.1, h * 0.2), c.lineTo(0, h * 0.36), c.closePath()));
   },
+  // Wi-Fi (full): two arcs and a wedge fanning up from the bottom centre, 28 x 20 px of the 32 px frame.
   'IcoWifi_03_32^s': (c, w, h) => {
-    c.strokeStyle = 'rgba(255,255,255,0.55)';
-    for (const r of [0.42, 0.29, 0.16]) stroke(c, w * 0.08, () => c.arc(w / 2, h * 0.82, w * r, Math.PI * 1.22, Math.PI * 1.78));
-    c.fillStyle = 'rgba(255,255,255,0.55)';
-    fill(c, () => c.arc(w / 2, h * 0.8, w * 0.06, 0, Math.PI * 2));
+    const cx = w * 0.484;
+    const cy = h * 0.8;
+    const a0 = Math.PI * 1.25;
+    const a1 = Math.PI * 1.75;
+    for (const r of [0.53, 0.32]) stroke(c, w * 0.125, () => c.arc(cx, cy, w * r, a0, a1));
+    c.lineJoin = 'round';
+    c.lineWidth = w * 0.05;
+    c.beginPath();
+    c.moveTo(cx, cy);
+    c.arc(cx, cy, w * 0.19, a0, a1);
+    c.closePath();
+    c.fill();
+    c.stroke();
   },
   'NavBg_01^s': (c, w, h) => {
     const g = c.createRadialGradient(w, h / 2, 0, w, h / 2, w * 1.2);

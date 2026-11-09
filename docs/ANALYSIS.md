@@ -146,6 +146,45 @@ Checked side by side against real console captures (stock Basic White and Purple
   editor-only eye and lock. The separate simulator is gone: Preview is the same view without editing.
 - **UI.** Neutral tool styling (Inter, flat panels, one accent) instead of the earlier look.
 
+## Round 5: console behaviour and the injector's full layout.json
+
+- **Focused game in front.** qlaunch draws the focused game above its neighbours, so a theme that
+  enlarges it on focus (Purple Skies) overlaps the row instead of being covered by the next icon.
+  The scene now moves the slot holding the focused game to the end of its row (Home `N_Game`, All
+  Software blocks and rows); hit testing follows, because it uses the same draw order.
+- **"Playing" badge.** The pill is `P_Suspend_00` (black through the translucent `White1x1A220`
+  texture, a 3 px white border from its `S_Border*` user data). Two fixes: the pill kept its
+  colour in Basic Black (translucent 1x1 scrims are no longer theme-recoloured), and the running
+  state now also plays `User_00`, which shows the player's picture and moves the text pill right
+  of it (`N_TextPos` X = 27 at home, 17 in All Software), as on the console.
+- **Borders.** qlaunch's border shader (`S_BorderDrawMode`, `S_BorderSize`, `S_BorderVolume`,
+  `S_BorderColorSelect0` palette index or `S_BorderColor0`) is drawn for every picture pane.
+- **Profile pictures.** Eight original illustrations in `public/avatars` (a character on a coloured
+  backdrop, like the console's own pictures) replace the emoji. Console tab > Users edits names and
+  pictures, including your own image. Idle account buttons no longer show the friend/error badges.
+- **Everything SwitchThemesCommon applies** (`SzsPatcher.ApplyLayoutPatch`, `PatchingExtension.cs`):
+  - `Materials`: `ForegroundColor` / `BackgroundColor` (the material's first and second colour,
+    i.e. black and white), texture `Refs` wrap modes and `Transforms`.
+  - `UsdPatches`: same count and type replaces, a missing property is added. Themes add float
+    properties typed int32 holding the float's bits (Purple Skies' `S_RoundRadius` 1106247680 =
+    30.0), which qlaunch reads as floats; the preview does the same.
+  - `ColorTL`..`ColorBR` on text panes are font colours (top/bottom), not vertex colours.
+  - `PullFrontPanes` (to the start of the parent: drawn first, behind) and `PushBackPanes` (to the
+    end: in front), after the pane patches, like the injector.
+  - `PatchAppletColorAttrib`: the home applet icons read from their alpha channel.
+  - `AddGroups` only matters to animations that target the new groups; the preview applies
+    animations by pane, so it has no visible effect here.
+- The theme's `L_Balloon` visibility now hides the game title (Purple Skies hides it).
+
+- **Status bar.** The clock and battery are rows of one-digit glyph parts (`L_GTNum_xx`, 14 x 24
+  cells) that qlaunch shows or hides; the preview now draws each digit in its own cell instead of
+  one text string, and lays the bar out right to left like qlaunch: battery icon, percentage (as
+  wide as its visible digits), 16 px margin, Wi-Fi, 20 px margin, clock. Spacing matches console
+  screenshots to a pixel or two. The Wi-Fi and battery pictograms were redrawn to the textures'
+  real framing (Wi-Fi fills 28 x 20 of its 32 px frame), the gauge fills to the charge level and
+  the gap inside the outline is the screen background (palette 52). Battery and Wi-Fi are no
+  longer mock settings (fixed at 85 % and full signal); the clock still is.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

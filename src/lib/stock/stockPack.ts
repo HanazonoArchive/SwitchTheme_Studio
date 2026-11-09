@@ -22,7 +22,8 @@ export type StockTextureKind =
   | { kind: 'solid'; rgba: number[] }
   | { kind: 'vgrad' | 'hgrad'; stops: number[][] }
   | { kind: 'roundrect'; r: number; rgb: number[]; a: number }
-  | { kind: 'drawn' }
+  /** `box`: where the console's picture sits in its frame (x0, y0, x1, y1), so ours can match it. */
+  | { kind: 'drawn'; box?: number[] }
   | { kind: 'none' };
 
 export type StockTexture = StockTextureKind & { stock: true; name: string; width: number; height: number };
@@ -45,6 +46,24 @@ const USED_ANIMS =
   /_(In|UnFocusKey|UnfocusKey|UnFocusTouch|Inactive|DlOut|SuspendOut|PromoOut|CardOut|CardStatusOut|DigitalBundleOut|EffectLaunchOut|Enter|RefreshIn|BtnChangeUserIn|MyPage|BaseOut|LockMainOut|SpecialNewsTextOut|ContentsIn|Out|FocusKey|Active|SuspendIn|SuspendText|User_00)\.bflan$/;
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
+
+/** Bounds of the opaque part of a picture (alpha above 40 % of its maximum), or null when empty. */
+export function alphaBox(img: ImageDataLike): number[] | null {
+  const { width: w, height: h, data } = img;
+  let max = 0;
+  for (let i = 3; i < data.length; i += 4) max = Math.max(max, data[i]);
+  if (!max) return null;
+  let [x0, y0, x1, y1] = [w, h, 0, 0];
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      if (data[(y * w + x) * 4 + 3] > max * 0.4) {
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x + 1);
+        y1 = Math.max(y1, y + 1);
+      }
+  return x1 > x0 ? [x0, y0, x1, y1] : null;
+}
 
 /** Describes a decoded texture with a few numbers: uniform colour, 1D gradient or rounded shape. */
 export function classifyTexture(img: ImageDataLike): StockTextureKind {
@@ -135,7 +154,11 @@ export function toStockArchive(
   const textures: StockArchive['textures'] = {};
   for (const [name, t] of sys.textures) {
     let kind: StockTextureKind = { kind: 'none' };
-    if (drawnNames.has(name)) kind = { kind: 'drawn' };
+    if (drawnNames.has(name)) {
+      const img = decode(name);
+      const box = img ? alphaBox(img) : null;
+      kind = box ? { kind: 'drawn', box } : { kind: 'drawn' };
+    }
     else {
       const img = decode(name);
       if (img) kind = classifyTexture(img);

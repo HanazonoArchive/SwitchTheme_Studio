@@ -185,6 +185,15 @@ Checked side by side against real console captures (stock Basic White and Purple
   the gap inside the outline is the screen background (palette 52). Battery and Wi-Fi are no
   longer mock settings (fixed at 85 % and full signal); the clock still is.
 
+- **Applet icons centred.** Many console icon textures don't fill their frame (the Album picture
+  sits in the top-left 40 x 27 px of a 52 x 45 texture), so stand-ins drawn edge to edge landed off
+  centre. The stock pack now records where each console picture sits in its frame (four numbers,
+  no pixels) and our drawing is fitted onto that footprint, so every layout position, mirror and
+  UV lines it up where the console's sits.
+- **IgnorePartsMagnify keeps the offset too**, not only the size. This put the lock screen news
+  scrim (and its title) back at the bottom of each tile. The news mask gradient also runs the
+  right way now (clear at the top), and white text without a palette colour stays white.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

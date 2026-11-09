@@ -370,7 +370,12 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     // A colour set by the theme wins over the system palette.
     if (pane.fontColorPatched && pane.fontColor) return toCss(parseLayoutColor(pane.fontColor));
     const c = paletteColor(pane.userData?.C_W?.[0], dark);
-    return c ? toCss(c) : ink;
+    if (c) return toCss(c);
+    // No palette colour: white or coloured text keeps its own colour (e.g. titles on a dark scrim);
+    // neutral dark text follows the theme's ink.
+    const own = pane.fontColor ? parseLayoutColor(pane.fontColor) : null;
+    if (own && (Math.min(own[0], own[1], own[2]) > 230 || Math.max(own[0], own[1], own[2]) - Math.min(own[0], own[1], own[2]) > 40)) return toCss(own);
+    return ink;
   };
   const borderOf = (pane: BflytPane): Border | undefined => {
     const u = pane.userData;
@@ -603,8 +608,10 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const w = pane.partsMagnify === 'ignore' ? pane.size.X : pane.size.X * m.x;
     const h = pane.partsMagnify === 'ignore' ? pane.size.Y : pane.size.Y * m.y;
     const a = realAnchors(pane);
-    const x = anchor(a.parentX, parentW) * m.x + posX * m.x;
-    const y = anchor(a.parentY, parentH) * m.y - pane.position.Y * m.y;
+    // IgnorePartsMagnify panes keep their own size and offset; the rest scale with the part.
+    const pm = pane.partsMagnify === 'ignore' ? { x: 1, y: 1 } : m;
+    const x = anchor(a.parentX, parentW) * m.x + posX * pm.x;
+    const y = anchor(a.parentY, parentH) * m.y - pane.position.Y * pm.y;
     const rotation = -pane.rotation.Z;
     const rad = (rotation * Math.PI) / 180;
     const cos = Math.cos(rad);
@@ -648,7 +655,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       childOffsetX,
       world,
       parentWorld,
-      posScale: { x: m.x, y: m.y },
+      posScale: { x: pm.x, y: pm.y },
       sizeScale: pane.partsMagnify === 'ignore' ? { x: 1, y: 1 } : { x: m.x, y: m.y },
       gameIndex: childCtx.iconIndex,
     };

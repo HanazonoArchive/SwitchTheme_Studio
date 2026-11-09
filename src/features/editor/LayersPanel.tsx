@@ -49,9 +49,19 @@ export const LayersPanel: React.FC<Props> = ({ scene, selectedId, hiddenIds, loc
     return set;
   }, [selectedId]);
   const isOpenId = (id: string) => open.has(id) || (revealed.has(id) && !collapsed.has(id));
+  // A new selection always reveals itself: reopen ancestors collapsed by hand, leave a search
+  // that doesn't contain it. (State adjusted while rendering, not in an effect.)
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  if (selectedId !== shownFor) {
+    setShownFor(selectedId);
+    if (selectedId && [...collapsed].some((id) => revealed.has(id))) setCollapsed(new Set([...collapsed].filter((id) => !revealed.has(id))));
+    if (selectedId && query && !selectedId.split('/').pop()!.toLowerCase().includes(query.trim().toLowerCase())) setQuery('');
+  }
+  // Scroll the selected layer into view once its row exists.
   useEffect(() => {
-    listRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [selectedId, open]);
+    const id = requestAnimationFrame(() => listRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'center' }));
+    return () => cancelAnimationFrame(id);
+  }, [selectedId]);
 
   const roots = useMemo(() => (scene ? visibleChildren(scene.root) : []), [scene]);
   const matches = useMemo(() => {

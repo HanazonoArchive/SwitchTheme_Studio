@@ -30,9 +30,15 @@ To regenerate the built-in pack from a dump (e.g. for a new firmware):
 npm run build:stock -- path/to/extracted
 ```
 
+## Start page
+
+Opening the app shows a start page (no popup): create a theme from the stock layout or a template, open
+an `.nxtheme`, reopen a recent theme, or try an example. Themes are saved in your browser as you work
+(IndexedDB) and listed under Recent.
+
 ## Editing
 
-- **Canvas** (PixiJS/WebGL): Ctrl/⌘ + wheel zooms, wheel or Space + drag pans, double-click fits.
+- **Canvas** (PixiJS/WebGL): the wheel zooms around the cursor, Shift + wheel pans sideways, Space + drag or dragging the empty area pans, double-click fits.
 - **Select** a layer by clicking it; **Shift+Enter** selects its parent, **Enter** its first child.
   **Alt+click** picks the top layer under the cursor even inside the current selection.
 - **Move** by dragging (snaps to other layers and the screen; hold **Alt** to move freely, **Shift** to

@@ -23,7 +23,6 @@ interface ViewportProps {
   onResizePane: (key: string, change: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
   onDropFile: (file: File) => void;
-  onOpenProjectModal: () => void;
 }
 
 const MIN_ZOOM = 0.25;
@@ -44,7 +43,6 @@ export const Viewport: React.FC<ViewportProps> = ({
   onResizePane,
   onUpdateMockState,
   onDropFile,
-  onOpenProjectModal,
 }) => {
   const wallpaperUrl = useWallpaperPreview(activeScreen?.wallpaper ?? null, activeScreen?.adjustments ?? { brightness: 1, contrast: 1, dim: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,43 +80,51 @@ export const Viewport: React.FC<ViewportProps> = ({
     };
   }, []);
 
+  const w = scene?.width ?? 1280;
+  const h = scene?.height ?? 720;
+  const fit = Math.min((size.width - 64) / w, (size.height - 96) / h);
+  useEffect(() => {
+    view.current = { zoom, pan, fit, size };
+  });
+
+  // Wheel zooms around the cursor (Shift + wheel pans sideways, a trackpad's two-finger scroll with
+  // Ctrl is a pinch). The listener is native and non-passive so the browser doesn't zoom the page.
+  const view = useRef({ zoom: 1, pan: { x: 0, y: 0 }, fit: 1, size: { width: 1280, height: 720 } });
+  const hasScreen = Boolean(activeScreen);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const v = view.current;
+      if (e.shiftKey && !e.ctrlKey) {
+        setPan({ x: v.pan.x - (e.deltaY || e.deltaX), y: v.pan.y });
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const cx = e.clientX - r.left - v.size.width / 2 - v.pan.x;
+      const cy = e.clientY - r.top - (v.size.height / 2 - 16) - v.pan.y;
+      const step = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      const next = Math.min(MAX_ZOOM / Math.max(v.fit, 0.01), Math.max(MIN_ZOOM, v.zoom * Math.exp(-step * (e.ctrlKey ? 0.01 : 0.0018))));
+      const k = next / v.zoom;
+      setPan({ x: v.pan.x - cx * (k - 1), y: v.pan.y - cy * (k - 1) });
+      setZoom(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [hasScreen]);
+
   const background = React.useMemo(
     () => (wallpaperUrl ? { url: wallpaperUrl } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }),
     [wallpaperUrl, mockState.isDarkTheme],
   );
 
-  if (!activeScreen) {
-    return (
-      <section className="flex-1 bg-[var(--canvas)] flex flex-col items-center justify-center text-center p-8">
-        <h2 className="text-[15px] font-semibold text-[var(--text)]">No theme open</h2>
-        <p className="mt-1.5 text-[12px] text-[var(--text-2)] max-w-xs">Start from the console's stock layout, or open an .nxtheme to edit it.</p>
-        <button onClick={onOpenProjectModal} className="ui-btn ui-btn-primary mt-4">
-          New or open theme
-        </button>
-      </section>
-    );
-  }
+  if (!activeScreen) return null;
 
-  const w = scene?.width ?? 1280;
-  const h = scene?.height ?? 720;
-  const fit = Math.min((size.width - 64) / w, (size.height - 96) / h);
   const scale = Math.max(0.05, fit * zoom);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
   const zoomTo = (z: number) => setZoom(Math.min(MAX_ZOOM / Math.max(fit, 0.01), Math.max(MIN_ZOOM, z)));
-  const onWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom around the cursor.
-      const r = containerRef.current!.getBoundingClientRect();
-      const cx = e.clientX - r.left - size.width / 2 - pan.x;
-      const cy = e.clientY - r.top - size.height / 2 - pan.y;
-      const next = Math.min(MAX_ZOOM / Math.max(fit, 0.01), Math.max(MIN_ZOOM, zoom * Math.exp(-e.deltaY * 0.0025)));
-      const k = next / zoom;
-      setPan({ x: pan.x - cx * (k - 1), y: pan.y - cy * (k - 1) });
-      setZoom(next);
-    } else setPan({ x: pan.x - e.deltaX, y: pan.y - e.deltaY });
-  };
-
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button === 1 || space || e.target === e.currentTarget) {
       panning.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
@@ -142,7 +148,6 @@ export const Viewport: React.FC<ViewportProps> = ({
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden ui-canvas-bg"
-        onWheel={onWheel}
         onPointerDownCapture={(e) => {
           if (space || e.button === 1) {
             e.stopPropagation();
@@ -224,7 +229,10 @@ export const Viewport: React.FC<ViewportProps> = ({
               className="h-7 rounded-md bg-transparent text-[12px] px-1 hover:bg-[var(--hover)] outline-none"
               value={snap.gridSize}
               title="Grid size"
-              onChange={(e) => onSnapChange({ ...snap, gridSize: +e.target.value })}
+              onChange={(e) => {
+                onSnapChange({ ...snap, gridSize: +e.target.value });
+                e.target.blur(); // keep keyboard shortcuts working
+              }}
             >
               {[4, 8, 10, 16, 20, 32, 40].map((g) => (
                 <option key={g} value={g} className="bg-[var(--panel)]">

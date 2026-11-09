@@ -11,7 +11,9 @@ import { ScreensList } from './features/editor/ScreensList';
 import { LayersPanel } from './features/editor/LayersPanel';
 import type { SnapSettings } from './features/canvas/EditorOverlay';
 import { buildScene, buildSource, type SceneNode } from './lib/render/scene';
-import { ProjectModal } from './features/project/ProjectModal';
+import { StartPage } from './features/project/StartPage';
+import { saveProject } from './lib/state/projectStore';
+import { readThemeFiles } from './lib/theme/nxtheme';
 import { ExportModal } from './features/project/ExportModal';
 
 import { useHistory } from './lib/state/useHistory';
@@ -58,7 +60,6 @@ export function App() {
   const [snap, setSnap] = useState<SnapSettings>({ grid: false, gridSize: 8, guides: true });
   // Which screen is open is view state, not part of undo history.
   const [activeScreenId, setActiveScreenId] = useState<string | null>(null);
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(true);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Built-in layouts, plus the user's console files remembered between sessions.
@@ -66,6 +67,33 @@ export function App() {
     loadStockLayouts().then(setStockLayouts);
     loadSavedSystemLayouts().then((saved) => setSystemLayouts((prev) => ({ ...saved, ...prev })));
   }, []);
+
+  // Save the theme in this browser as you work (the start page lists recent themes).
+  useEffect(() => {
+    if (!project) return;
+    const t = setTimeout(() => saveProject(project).catch((e) => console.warn('Could not save the theme in this browser', e)), 600);
+    return () => clearTimeout(t);
+  }, [project]);
+
+  const openProject = useCallback(
+    (p: ThemeProject) => {
+      history.reset(p);
+      setActiveScreenId(p.activeScreenId);
+      setSelectedKey(null);
+      setSelectedId(null);
+      setHiddenIds(new Set());
+      setLockedIds(new Set());
+    },
+    [history],
+  );
+  const openThemeFiles = useCallback(
+    (files: File[]) => {
+      readThemeFiles(files.map((f) => ({ name: f.name, blob: f })))
+        .then(openProject)
+        .catch((e) => alert((e as Error).message));
+    },
+    [openProject],
+  );
 
   const activeScreen = project ? project.screens.find((s) => s.id === activeScreenId) || project.screens[0] : null;
   const activeId = activeScreen?.id ?? null;
@@ -321,11 +349,10 @@ export function App() {
           setMode(m);
           if (m === 'preview') selectNode(null);
         }}
-        onOpenProjectModal={() => setIsProjectModalOpen(true)}
+        onOpenFiles={openThemeFiles}
         onCloseProject={() => {
           history.reset(null);
           selectNode(null);
-          setIsProjectModalOpen(true);
         }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onRenameProject={(name, author) => history.set((p) => (p ? { ...p, name, author } : p))}
@@ -336,6 +363,8 @@ export function App() {
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        {!project && <StartPage onOpen={openProject} />}
+
         {project && activeScreen && (
           <aside className="w-[264px] shrink-0 flex flex-col bg-[var(--panel)] border-r border-[var(--border)] min-h-0">
             <ScreensList
@@ -371,7 +400,7 @@ export function App() {
           </aside>
         )}
 
-        <Viewport
+        {project && <Viewport
           activeScreen={activeScreen}
           scene={scene}
           mode={mode}
@@ -386,11 +415,12 @@ export function App() {
           onResizePane={handleResizePane}
           onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
           onDropFile={(file) => {
-            if (file.name.toLowerCase().endsWith('.szs')) handleLoadSystemSzs([file]);
+            const n = file.name.toLowerCase();
+            if (n.endsWith('.szs')) handleLoadSystemSzs([file]);
+            else if (n.endsWith('.nxtheme') || n.endsWith('.zip')) openThemeFiles([file]);
             else handleReplaceWallpaper(file);
           }}
-          onOpenProjectModal={() => setIsProjectModalOpen(true)}
-        />
+        />}
 
         {activeScreen && (
           <aside className="w-[288px] shrink-0 flex flex-col bg-[var(--panel)] border-l border-[var(--border)] min-h-0">
@@ -412,17 +442,7 @@ export function App() {
         )}
       </div>
 
-      <ProjectModal
-        isOpen={isProjectModalOpen}
-        canClose={Boolean(project)}
-        onClose={() => setIsProjectModalOpen(false)}
-        onInitializeProject={(p) => {
-          history.reset(p);
-          setActiveScreenId(p.activeScreenId);
-          selectNode(null);
-          setIsProjectModalOpen(false);
-        }}
-      />
+
 
       {project && (
         <ExportModal

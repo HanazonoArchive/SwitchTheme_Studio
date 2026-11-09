@@ -134,3 +134,30 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #4a4a52;
 }
+
+@layer components {
+  .start-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 30px;
+    padding: 0 8px;
+    margin: 0 -8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--accent);
+    width: calc(100% + 16px);
+  }
+  .start-link:hover {
+    background: var(--hover);
+  }
+  .kbd {
+    font-family: inherit;
+    font-size: 11px;
+    padding: 0 4px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+  }
+}

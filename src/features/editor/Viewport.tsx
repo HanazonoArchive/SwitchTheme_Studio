@@ -23,7 +23,6 @@ interface ViewportProps {
   onResizePane: (key: string, change: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
   onDropFile: (file: File) => void;
-  onOpenProjectModal: () => void;
 }
 
 const MIN_ZOOM = 0.25;
@@ -44,7 +43,6 @@ export const Viewport: React.FC<ViewportProps> = ({
   onResizePane,
   onUpdateMockState,
   onDropFile,
-  onOpenProjectModal,
 }) => {
   const wallpaperUrl = useWallpaperPreview(activeScreen?.wallpaper ?? null, activeScreen?.adjustments ?? { brightness: 1, contrast: 1, dim: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,17 +119,7 @@ export const Viewport: React.FC<ViewportProps> = ({
     [wallpaperUrl, mockState.isDarkTheme],
   );
 
-  if (!activeScreen) {
-    return (
-      <section className="flex-1 bg-[var(--canvas)] flex flex-col items-center justify-center text-center p-8">
-        <h2 className="text-[15px] font-semibold text-[var(--text)]">No theme open</h2>
-        <p className="mt-1.5 text-[12px] text-[var(--text-2)] max-w-xs">Start from the console's stock layout, or open an .nxtheme to edit it.</p>
-        <button onClick={onOpenProjectModal} className="ui-btn ui-btn-primary mt-4">
-          New or open theme
-        </button>
-      </section>
-    );
-  }
+  if (!activeScreen) return null;
 
   const scale = Math.max(0.05, fit * zoom);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Download, FolderOpen, Redo2, Undo2, X } from 'lucide-react';
 import type { ThemeProject } from '../../types/theme';
 
@@ -6,7 +6,7 @@ interface TopBarProps {
   project: ThemeProject | null;
   mode: 'edit' | 'preview';
   onModeChange: (mode: 'edit' | 'preview') => void;
-  onOpenProjectModal: () => void;
+  onOpenFiles: (files: File[]) => void;
   onCloseProject: () => void;
   onOpenExportModal: () => void;
   onRenameProject: (name: string, author: string) => void;
@@ -16,8 +16,9 @@ interface TopBarProps {
   onRedo: () => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onOpenProjectModal, onCloseProject, onOpenExportModal, onRenameProject, canUndo, canRedo, onUndo, onRedo }) => {
+export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onOpenFiles, onCloseProject, onOpenExportModal, onRenameProject, canUndo, canRedo, onUndo, onRedo }) => {
   const [editing, setEditing] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="h-11 bg-[var(--panel)] border-b border-[var(--border)] px-3 grid grid-cols-[1fr_auto_1fr] items-center shrink-0 z-20">
       <div className="flex items-center gap-2 min-w-0">
@@ -41,14 +42,14 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
                 {project.name}
               </button>
             )}
-            <button onClick={onCloseProject} className="ui-icon-btn" title="Close theme">
+            <button onClick={onCloseProject} className="ui-icon-btn" title="Close (it stays in Recent on the start page)">
               <X className="w-3.5 h-3.5" />
             </button>
           </>
         )}
       </div>
 
-      <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--panel-2)]">
+      <div className={`flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--panel-2)] ${project ? '' : 'invisible'}`}>
         {(['edit', 'preview'] as const).map((m) => (
           <button
             key={m}
@@ -73,7 +74,8 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
             <span className="ui-sep" />
           </>
         )}
-        <button onClick={onOpenProjectModal} className="ui-btn" title="New or open a theme">
+        <input ref={fileRef} type="file" multiple accept=".nxtheme,.zip" className="hidden" onChange={(e) => (e.target.files?.length && onOpenFiles(Array.from(e.target.files)), (e.target.value = ''))} />
+        <button onClick={() => fileRef.current?.click()} className="ui-btn" title="Open an .nxtheme">
           <FolderOpen className="w-3.5 h-3.5" />
           Open
         </button>

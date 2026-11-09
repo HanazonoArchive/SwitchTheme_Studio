@@ -9,7 +9,7 @@ import { analyseMasks, type MaskInfo } from '../layout/blend';
 import { alphaOnlyTexture, paneVisual, parseLayoutColor, toCss, type PaneVisual } from '../layout/textures';
 import { paletteColor } from '../layout/palette';
 import type { MockSystemState } from '../../types/simulation';
-import { FOCUS_PANES, FOCUSED_PART, TEXT_MOCK } from './runtimeText';
+import { FOCUS_PANES, FOCUSED_PART, HUD_BATTERY, TEXT_MOCK } from './runtimeText';
 import * as draw from './mockDraw';
 import { mul, type Mat } from './matrix';
 
@@ -148,6 +148,18 @@ const INSTANCE_VARIANTS: [string, InstanceState][] = [
   ['#fr', { focused: true, running: true }],
 ];
 
+/** Clock glyph slots (24 h): tens of hours (hidden under 10), hours, tens of minutes, minutes. */
+function clockDigits(time: string): (string | undefined)[] {
+  const [h, m] = time.split(':').map((x) => parseInt(x, 10));
+  const hh = Number.isFinite(h) ? Math.max(0, Math.min(23, h)) : 12;
+  const mm = Number.isFinite(m) ? Math.max(0, Math.min(59, m)) : 0;
+  return [hh >= 10 ? String(Math.floor(hh / 10)) : undefined, String(hh % 10), String(Math.floor(mm / 10)), String(mm % 10)];
+}
+/** Battery glyph slots: hundreds, tens, ones (leading ones hidden). */
+function batteryDigits(n: number): (string | undefined)[] {
+  return [n >= 100 ? '1' : undefined, n >= 10 ? String(Math.floor(n / 10) % 10) : undefined, String(n % 10)];
+}
+
 const partIndex = (part: string | null) => parseInt(/(\d+)$/.exec(part ?? '')?.[1] ?? '0', 10);
 
 function pickBy<T>(items: T[], key: string): T | undefined {
@@ -234,6 +246,36 @@ function appletTextures(sys: SystemLayout, layout: LayoutPatch): SystemLayout['t
   return t;
 }
 
+/**
+ * The HUD is laid out by code from right to left: battery icon, battery percentage (as wide as its
+ * digits), a margin, the Wi-Fi icon, a margin, the clock. Each pane's X is its right edge; the
+ * layout's own values assume a 52 px wide percentage. The battery gauge fills to the charge level.
+ */
+function layoutHud(trees: Map<string, BflytPane | null>, layout: LayoutPatch) {
+  const hud = trees.get('blyt/Hud.bflyt');
+  const num = trees.get('blyt/HudBatteryNum.bflyt');
+  if (hud && num) {
+    const digits = batteryDigits(HUD_BATTERY);
+    let width = 0;
+    for (let i = 0; i < 3; i++) {
+      const slot = findChild(num, `L_GTNum_0${i}`);
+      if (slot && digits[i] !== undefined) width = Math.max(width, -(slot.position.X - (slot.size.X * slot.scale.X) / 2));
+    }
+    const chain = ['N_BatteryNum', 'N_Margin_00', 'N_Signal', 'N_Margin_01', 'N_Time'].map((n) => findChild(hud, n));
+    if (width > 0 && chain.every(Boolean)) {
+      let x = chain[0]!.position.X - width;
+      for (let i = 1; i < chain.length; i++) {
+        const p = chain[i]!;
+        if (!findPanePatch(layout, 'blyt/Hud.bflyt', p.name)?.Position) p.position = { ...p.position, X: x };
+        x = p.position.X - p.size.X;
+      }
+    }
+  }
+  const bat = trees.get('blyt/BatteryConsole.bflyt');
+  const gauge = bat && findChild(bat, 'P_GaugeNml');
+  if (gauge && !findPanePatch(layout, 'blyt/BatteryConsole.bflyt', 'P_GaugeNml')?.Size) gauge.size = { ...gauge.size, X: (gauge.size.X * HUD_BATTERY) / 100 };
+}
+
 export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boolean, editable: boolean): Source {
   const trees = new Map<string, BflytPane | null>();
   const masks = new Map<string, MaskInfo>();
@@ -268,6 +310,7 @@ export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boo
       if (first && !findPanePatch(layout, 'blyt/FlcCntMain.bflyt', r.name)?.Position) r.position = { ...r.position, Y: first.position.Y - n * APPS_ROW_STEP };
     }
   }
+  layoutHud(trees, layout);
   return { sys, trees, mats, materials, textures: appletTextures(sys, layout), layout, editable, masks };
 }
 
@@ -368,7 +411,15 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     TEXT_MOCK[`${target}:${ctx.file}::${name}`] ??
     TEXT_MOCK[`${ctx.file}::${name}`];
 
-  const replacesChildren = (pane: BflytPane, ctx: Ctx) => ctx.file === 'blyt/Hud.bflyt' && (pane.name === 'N_Time' || pane.name === 'N_BatteryNum');
+  /** HUD digits: the clock and battery are rows of one-digit glyph parts (L_GTNum_xx) that qlaunch shows or hides. */
+  const hudDigit = (ctx: Ctx, pane: BflytPane): string | null | undefined => {
+    const m = pane.kind === 'prt1' ? /^L_GTNum_(\d\d)$/.exec(pane.name) : null;
+    if (!m) return undefined;
+    const slot = parseInt(m[1], 10);
+    if (ctx.file === 'blyt/HudTime.bflyt') return clockDigits(mock.time)[slot] ?? null;
+    if (ctx.file === 'blyt/HudBatteryNum.bflyt') return batteryDigits(HUD_BATTERY)[slot] ?? null;
+    return undefined;
+  };
 
   const image = (url: string, w: number, h: number, radius?: number): Content => ({ type: 'image', url, x: 0, y: 0, w, h, radius });
   const canvasContent = (sig: string, x: number, y: number, w: number, h: number, fn: (c: CanvasRenderingContext2D) => void): Content => ({ type: 'canvas', sig, x, y, w, h, draw: fn });
@@ -432,6 +483,9 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
         // Account buttons: the picture with qlaunch's white ring.
         if (u) return { ...avatar(pane, u.avatarUrl, w, h, true), border: borderOf(pane) ?? { size: 3, color: 'rgba(255,255,255,1)' } };
       }
+      // Clock colon and battery percent sign (font glyph textures on the console).
+      if (pane.name === 'P_Colon' && ctx.file === 'blyt/HudTime.bflyt') return canvasContent(`colon|${ink}|${w}x${h}`, 0, 0, w, h, (c) => draw.hudGlyph(c, ':', w, h, ink));
+      if (pane.name === 'P_Per' && ctx.file === 'blyt/HudBatteryNum.bflyt') return canvasContent(`per|${ink}|${w}x${h}`, 0, 0, w, h, (c) => draw.hudGlyph(c, '%', w, h, ink));
       if (STATE_PANE.test(pane.name)) return null;
       const mi = ctx.src.masks.get(ctx.file);
       if (mi && (mi.alphaOnly.has(pane.name) || mi.hiddenTargets.has(pane.name))) return null;
@@ -456,12 +510,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       return canvasContent(`cursor|${w}x${h}|${r}`, -14, -14, w + 28, h + 28, (c) => draw.cursor(c, 14, 14, w, h, CURSOR, r));
     }
 
-    if (pane.kind === 'pan1' && ctx.file === 'blyt/Hud.bflyt' && (pane.name === 'N_Time' || pane.name === 'N_BatteryNum')) {
-      const text = pane.name === 'N_Time' ? mock.time : `${mock.battery}%`;
-      const size = pane.name === 'N_Time' ? 27 : 21;
-      const tw = draw.measure(text, size) + 2;
-      return canvasContent(`hud|${text}|${ink}`, w - tw, h / 2 - size, tw, size * 2, (c) => draw.text(c, text, tw, size * 2, size, ink, 'right'));
-    }
+    const digit = hudDigit(ctx, pane);
+    if (digit) return canvasContent(`digit|${digit}|${ink}|${w}x${h}`, 0, 0, w, h, (c) => draw.hudGlyph(c, digit, w, h, ink));
 
     // The title balloon (hidden when the theme hides its L_Balloon part).
     if (pane.name === 'N_Tip' && (ctx.file === ICON_LAYOUT || ctx.file === 'blyt/FlcBtnIconGame.bflyt') && ctx.iconIndex === selectedGame && findChild(pane, 'L_Balloon')?.visible !== false) {
@@ -537,7 +587,9 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
         ? parseInt(accountMatch[1], 10) < mock.users.length && findPanePatch(ctx.src.layout, ctx.file, pane.name)?.Visible !== false
         : pslMatch !== null
           ? parseInt(pslMatch[1], 10) < mock.users.length
-          : null;
+          : hudDigit(ctx, pane) !== undefined
+            ? hudDigit(ctx, pane) !== null
+            : null;
     const pslX = pslMatch
       ? pslSlotX(parseInt(pslMatch[1], 10), mock.users.length)
       : ctx.file === 'blyt/PslSelectSinglePlayer.bflyt' && pane.name === 'N_BtnAdd'
@@ -608,7 +660,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
 
     const before: SceneNode[] = [];
     const after: SceneNode[] = [];
-    if (!hidden && pane.kind === 'prt1' && ctx.depth < MAX_PART_DEPTH) {
+    if (!hidden && pane.kind === 'prt1' && ctx.depth < MAX_PART_DEPTH && hudDigit(ctx, pane) === undefined) {
       const partFile = resolvePartLayout(ctx.src.sys, pane);
       const partRoot = partFile ? ctx.src.trees.get(partFile) : null;
       if (partFile && partRoot) {
@@ -643,7 +695,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       }
     }
 
-    const own = !hidden && !replacesChildren(pane, ctx) ? pane.children.map((c) => node(c, pane.size.X, pane.size.Y, childCtx, childWorld, id)).filter((n): n is SceneNode => !!n) : [];
+    const own = !hidden ? pane.children.map((c) => node(c, pane.size.X, pane.size.Y, childCtx, childWorld, id)).filter((n): n is SceneNode => !!n) : [];
     // Hidden panes still list their children (undrawn) so they can be found in the layers panel.
     const hiddenKids = hidden ? pane.children.map((c) => hiddenNode(c, ctx, id, childWorld)) : [];
     self.children = [...before, ...focusLast(own, pane, ctx), ...hiddenKids, ...after];

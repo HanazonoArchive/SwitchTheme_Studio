@@ -38,9 +38,6 @@ export function App() {
 
   const [mockState, setMockState] = useState<MockSystemState>({
     time: '12:00',
-    battery: 85,
-    isCharging: false,
-    wifiStrength: 3,
     users: DEFAULT_MOCK_USERS,
     games: DEFAULT_MOCK_GAMES,
     selectedGameIndex: 0,

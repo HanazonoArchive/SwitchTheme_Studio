@@ -117,6 +117,41 @@ export function hints(c: CanvasRenderingContext2D, items: [string, string][], si
   });
 }
 
+/**
+ * One status-bar glyph (digit, ':' or '%') filling its glyph cell like the console's font
+ * textures: digits are 20 px tall in a 24 px cell, 12 px wide in 14.
+ */
+export function hudGlyph(c: CanvasRenderingContext2D, ch: string, w: number, h: number, color: string) {
+  c.fillStyle = color;
+  if (ch === ':') {
+    const r = Math.min(w, h) * 0.26;
+    for (const y of [h * 0.36, h * 0.68]) {
+      c.beginPath();
+      c.arc(w / 2, y, r, 0, Math.PI * 2);
+      c.fill();
+    }
+    return;
+  }
+  const isDigit = ch >= '0' && ch <= '9';
+  const targetH = isDigit ? h * (20 / 24) : h * 0.86;
+  const targetW = isDigit ? w * (12 / 14) : w * 0.9;
+  c.font = font(100, 500);
+  c.textAlign = 'center';
+  c.textBaseline = 'alphabetic';
+  const m = c.measureText(ch);
+  const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || 72;
+  const gw = m.actualBoundingBoxRight + m.actualBoundingBoxLeft || 55;
+  const k = Math.min(targetH / gh, (targetW / gw) * 1.15);
+  c.save();
+  c.translate(w / 2, h / 2);
+  // Condense a little when the font's digit is wider than the cell.
+  const sx = Math.min(1, targetW / (gw * k));
+  c.scale(k * sx, k);
+  // Centre the ink, not the advance box.
+  c.fillText(ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+  c.restore();
+}
+
 export function cursor(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, radius = 0) {
   c.save();
   c.shadowColor = color;

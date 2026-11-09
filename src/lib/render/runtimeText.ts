@@ -1,3 +1,6 @@
+/** Battery level shown in the preview's status bar. */
+export const HUD_BATTERY = 85;
+
 /** Strings qlaunch sets at runtime, for text panes whose layout text is a dev placeholder. */
 export const TEXT_MOCK: Record<string, string> = {
   'blyt/EntBtnLock.bflyt::T_00': 'Press the same button three times.',

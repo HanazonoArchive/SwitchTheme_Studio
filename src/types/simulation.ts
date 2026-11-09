@@ -15,9 +15,6 @@ export interface MockGame {
 
 export interface MockSystemState {
   time: string;
-  battery: number;
-  isCharging: boolean;
-  wifiStrength: number; // 0..3
   users: MockUser[];
   games: MockGame[];
   selectedGameIndex: number;

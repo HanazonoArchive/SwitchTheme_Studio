@@ -32,7 +32,7 @@ export const PALETTE: Record<number, Pair> = {
   42: same('00c3e3'), // "Change User", balloon accent
   43: same('00c3e3'),
   44: { light: c('ffffff'), dark: c('383838') }, // plates
-  52: { light: c('2d2d2d'), dark: c('ffffff') }, // battery outline
+  52: { light: c('ebebeb'), dark: c('2d2d2d') }, // inside the battery outline (screen background)
   58: { light: c('2d2d2d'), dark: c('ffffff') },
   63: same('00c3e3'), // cursor
   65: same('00c3e3'),

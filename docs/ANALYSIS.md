@@ -176,6 +176,15 @@ Checked side by side against real console captures (stock Basic White and Purple
     animations by pane, so it has no visible effect here.
 - The theme's `L_Balloon` visibility now hides the game title (Purple Skies hides it).
 
+- **Status bar.** The clock and battery are rows of one-digit glyph parts (`L_GTNum_xx`, 14 x 24
+  cells) that qlaunch shows or hides; the preview now draws each digit in its own cell instead of
+  one text string, and lays the bar out right to left like qlaunch: battery icon, percentage (as
+  wide as its visible digits), 16 px margin, Wi-Fi, 20 px margin, clock. Spacing matches console
+  screenshots to a pixel or two. The Wi-Fi and battery pictograms were redrawn to the textures'
+  real framing (Wi-Fi fills 28 x 20 of its 32 px frame), the gauge fills to the charge level and
+  the gap inside the outline is the screen background (palette 52). Battery and Wi-Fi are no
+  longer mock settings (fixed at 85 % and full signal); the clock still is.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

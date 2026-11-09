@@ -1,63 +1,252 @@
-# SwitchTheme Studio
+<p align="center">
+  <img src="docs/screenshots/logo.svg" width="72" alt="" />
+</p>
 
-A browser editor for Nintendo Switch custom themes (`.nxtheme`) in the format used by
-[SwitchThemeInjector / NXThemes Installer](https://github.com/exelix11/SwitchThemeInjector). Requires a
-modded console to install.
+<h1 align="center">SwitchTheme Studio</h1>
 
-## Run
+<p align="center">
+  Create, edit and preview Nintendo Switch custom themes (<code>.nxtheme</code>) in the browser,<br />
+  with a console-accurate live preview of every screen.
+</p>
+
+<p align="center">
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-7-3178c6?logo=typescript&logoColor=white" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white" />
+  <img alt="PixiJS" src="https://img.shields.io/badge/PixiJS-8-e72264" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-vitest-6e9f18" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/editor.jpg" alt="The editor with the Purple Skies theme open: screens on the left, the Home menu on the canvas, layers and inspector on the right" />
+</p>
+
+SwitchTheme Studio is a viewer, editor and creator for themes in the format used by
+[SwitchThemeInjector / NXThemes Installer](https://github.com/exelix11/SwitchThemeInjector). It renders
+the console's real layout files and applies a theme the same way the installer does, so what you see
+in the browser is what the console shows. Nothing needs to be installed and nothing leaves your
+browser.
+
+> Installing custom themes requires a console running custom firmware and NXThemes Installer.
+> This project is not affiliated with or endorsed by Nintendo.
+
+## Contents
+
+- [Highlights](#highlights)
+- [Screens](#screens)
+- [Getting started](#getting-started)
+- [Using the studio](#using-the-studio)
+- [Console layouts](#console-layouts)
+- [layout.json support](#layoutjson-support)
+- [Project structure](#project-structure)
+- [Development](#development)
+- [Known limitations](#known-limitations)
+- [Acknowledgements](#acknowledgements)
+
+## Highlights
+
+- **Console-accurate preview.** Renders the actual pane trees of firmware 20.0+ (verified on 23.0.1):
+  anchors, parts, materials, blend masks, user-data borders and rounded corners, idle animation
+  states and the layouts qlaunch builds at runtime (game rows, the "Playing" badge, the status bar,
+  Settings pages).
+- **No dump needed.** The stock layouts ship as structure and numbers only, with our own stand-in
+  icons. Loading your console's `.szs` files is optional and adds the exact textures.
+- **Figma-style editor.** Click what you see, drag with smart guides and a snap grid, resize with
+  handles, nudge with the arrow keys, and undo everything. A full layer hierarchy with editor-only
+  hide and lock.
+- **Installer-exact patching.** Every `layout.json` feature SwitchThemesCommon applies is applied
+  here too, including installer compatibility fixes for the target firmware.
+- **Live preview mode.** Use the screen like the console: move focus between games, switch Basic
+  White / Basic Black, change users, games and the clock.
+- **Projects saved locally.** Themes autosave to IndexedDB and appear under Recent on the start page.
+- **One-click export** of a screen (`.nxtheme`) or the whole theme (`.zip`), ready for NXThemes Installer.
+
+## Screens
+
+<p align="center">
+  <img src="docs/screenshots/gallery.jpg" alt="Preview of four screens: stock Home and lock screen in Basic White and Purple Skies' Home menu and System Settings" />
+  <br />
+  <sub>Stock Home and lock screen (Basic White) and the Purple Skies theme (Home, System Settings), as rendered by the studio.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/start.jpg" alt="Start page with New theme, Open, Recent and Examples" /></td>
+    <td width="50%"><img src="docs/screenshots/console-tab.jpg" alt="Console tab with clock, system theme, users and simulated games" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Start page: new theme, open, recent projects, examples</sub></td>
+    <td align="center"><sub>Console tab: users and profile pictures, games, clock, Basic White / Black</sub></td>
+  </tr>
+</table>
+
+Supported screens: **Home menu**, **Lock screen**, **All Software**, **System Settings**, **News**,
+**User page** and **Player select**.
+
+## Getting started
+
+Requirements: [Node.js](https://nodejs.org/) 20.19+ or 22.12+.
 
 ```bash
+git clone https://github.com/HanazonoArchive/switchtheme_studio.git
+cd switchtheme_studio
 npm install
-npm run dev     # editor
-npm test        # parser / patch / export tests
-npm run build
+npm run dev
 ```
+
+Open the URL Vite prints (usually `http://localhost:5173`). To build a static site:
+
+```bash
+npm run build      # outputs to dist/
+npm run preview    # serves the build locally
+```
+
+## Using the studio
+
+### 1. Start or open a theme
+
+The start page offers:
+
+- **New theme**: start from the console's stock layout or from the Vertical OEM layout, and pick the
+  screens to include.
+- **Open .nxtheme**: open one or more themes (or a `.zip` of them). You can also drop files anywhere
+  on the page.
+- **Recent**: reopen themes saved in this browser.
+- **Examples**: Purple Skies (image theme) and Vertical OEM (layout-only theme).
+
+### 2. Edit
+
+| Action | How |
+|---|---|
+| Select a layer | Click it on the canvas or in **Layers** |
+| Select parent / first child | <kbd>Shift</kbd>+<kbd>Enter</kbd> / <kbd>Enter</kbd> |
+| Pick the top layer under the cursor | <kbd>Alt</kbd>+click |
+| Move | Drag (snaps to other layers and the screen). <kbd>Alt</kbd> moves freely, <kbd>Shift</kbd> locks an axis |
+| Resize | Drag a handle. <kbd>Shift</kbd> keeps the ratio |
+| Nudge | Arrow keys (<kbd>Shift</kbd> = 10 px) |
+| Zoom / pan | Wheel zooms around the cursor, <kbd>Shift</kbd>+wheel pans, <kbd>Space</kbd>+drag or drag empty space pans, double-click fits |
+| Undo / redo | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| Deselect | <kbd>Esc</kbd> |
+
+Panels:
+
+- **Screens** (left): the screens in the theme, with their edit counts.
+- **Background / Layout / Console / JSON** tabs: the theme image and adjustments, the layout and
+  installer compatibility, the preview's simulated console state, and the raw `layout.json`.
+- **Layers** (right): the full hierarchy, including parts and the layouts the console creates in
+  code. The eye and lock only affect the editor; hiding a pane in the theme is done in the Inspector.
+- **Inspector** (right): position, size, scale, rotation, anchors and visibility of the selected pane,
+  showing what the theme changed and what is stock.
+
+### 3. Preview
+
+Switch the top bar to **Preview** to use the screen like the console: click a game or use the arrow
+keys to move focus. The canvas toolbar switches between Basic White and Basic Black and steps through
+the games.
+
+### 4. Export
+
+**Export .nxtheme** downloads the current screen as an `.nxtheme`, or every screen as a theme pack
+(`.zip`). Copy the files to `sd:/themes/` and install them with NXThemes Installer.
+
+**Theme types**
+
+- **Custom image**: ships `image.jpg` (1280×720, baseline JPEG) or a DXT1 `image.dds`.
+- **Console default**: layout only; the console keeps its Basic White / Basic Black background.
 
 ## Console layouts
 
-The stock layouts are **built in** (`public/stock/*.json`): the pane trees, sizes, anchors, colours and
-idle animation values of firmware 20.0+, with the studio's own stand-in icons. No Nintendo files or
-images are included, so nothing needs to be dumped to start.
+The stock layouts are built in (`public/stock/*.json`). They hold the pane trees, sizes, anchors,
+colours, idle animation values and, for each texture, a short description: a colour, a gradient, a
+rounded shape, or where the console's picture sits in its frame. They contain no Nintendo files or
+pixels. Icons are the studio's own drawings, fitted onto the console's footprint so they line up.
 
-For the console's own textures (an exact check before installing), load your files in **Layout → Console
-layout**, or drop a `.szs` on the canvas: in NXThemes Installer open **Extract home menu → Extract szs
-layout files** and copy `sd:/themes/systemData/extracted/{qlaunch,mypage,playerselect}/lyt/*.szs`. They stay
-in your browser. Don't commit or share them (`*.szs` is gitignored).
+For an exact check with the console's own textures, load your files in **Layout → Console layout** or
+drop a `.szs` on the canvas. In NXThemes Installer choose **Extract home menu → Extract szs layout
+files**, then copy:
 
-To regenerate the built-in pack from a dump (e.g. for a new firmware):
+```
+sd:/themes/systemData/extracted/qlaunch/lyt/*.szs
+sd:/themes/systemData/extracted/mypage/lyt/*.szs
+sd:/themes/systemData/extracted/playerselect/lyt/*.szs
+```
+
+The files stay in your browser. Don't commit or share them (`*.szs` is gitignored).
+
+To regenerate the built-in pack from a dump (for a new firmware):
 
 ```bash
 npm run build:stock -- path/to/extracted
 ```
 
-## Start page
-
-Opening the app shows a start page (no popup): create a theme from the stock layout or a template, open
-an `.nxtheme`, reopen a recent theme, or try an example. Themes are saved in your browser as you work
-(IndexedDB) and listed under Recent.
-
-## Editing
-
-- **Canvas** (PixiJS/WebGL): the wheel zooms around the cursor, Shift + wheel pans sideways, Space + drag or dragging the empty area pans, double-click fits.
-- **Select** a layer by clicking it; **Shift+Enter** selects its parent, **Enter** its first child.
-  **Alt+click** picks the top layer under the cursor even inside the current selection.
-- **Move** by dragging (snaps to other layers and the screen; hold **Alt** to move freely, **Shift** to
-  lock an axis), **resize** with the handles (Shift keeps the ratio), **nudge** with the arrow keys.
-- **Grid**: toggle and size in the canvas toolbar; moves snap to it.
-- **Layers** (right): the whole hierarchy, including parts and the layouts the console creates by code.
-  The eye and lock only affect the editor. Hiding a pane *in the theme* is the eye in the Inspector.
-- **Preview** (top): use the screen like the console: click a game or use the arrow keys to move focus.
-
 ## layout.json support
 
-The preview applies everything the installer (SwitchThemesCommon) applies: pane patches (position,
-rotation, scale, size, visibility, origins, colours, user data), material patches, `PullFrontPanes`
-/ `PushBackPanes`, `PatchAppletColorAttrib`, and the theme's animations (as their resting state).
-The Console tab sets the preview's users, games, clock, battery and Basic White / Black.
+The preview applies everything the installer (SwitchThemesCommon) applies, in the same order:
 
-## Theme kinds
+| Feature | Notes |
+|---|---|
+| Pane patches | `Position`, `Rotation`, `Scale`, `Size`, `Visible`, origins and parent origins. A partial vector sets missing axes to 0, as in the installer, and the studio warns about it |
+| Colours | `ColorTL`…`ColorBR`: vertex colours on pictures, font colours on text panes |
+| `UsdPatches` | User data, with the injector's type and count rules (e.g. `S_RoundRadius`) |
+| `Materials` | `ForegroundColor` / `BackgroundColor`, texture wrap (`Refs`) and `Transforms` |
+| `PullFrontPanes` / `PushBackPanes` | Draw order within the parent |
+| `PatchAppletColorAttrib` | Home applet icons read from their alpha channel |
+| `Anims` | The theme's animations, shown at their resting state |
+| Compatibility fixes | The installer's per-firmware fixes, chosen from `TargetFirmware` |
 
-- **Custom image**: ships `image.jpg` (1280×720, baseline) or a DXT1 `image.dds`.
-- **Console default**: layout only; the console keeps its Basic Black / Basic White background.
+## Project structure
 
-See [docs/ANALYSIS.md](docs/ANALYSIS.md) for how this works and what's still missing.
+```
+src/
+  App.tsx                 app state, keyboard shortcuts, autosave
+  features/
+    canvas/               PixiJS renderer (PixiView) and the editing overlay
+    editor/               top bar, screens, tabs, layers, inspector, viewport
+    project/              start page and export
+  lib/
+    nx/                   Switch formats: SARC, Yaz0, BFLYT, BFLAN, BNTX, ASTC
+    layout/               layout.json model, patching, installer fixes, animation states,
+                          palette, blend masks, textures
+    render/               scene graph (world matrices, runtime content), mock drawing
+    stock/                built-in layout pack and stand-in icon drawings
+    theme/                .nxtheme read/write, background images
+    state/                undo history, project storage
+public/
+  stock/                  built-in console layouts (generated)
+  avatars/                original profile pictures for the preview
+  demos/                  example themes
+scripts/build-stock-pack.ts
+tests/                    vitest suites and fixtures
+docs/                     engineering notes and screenshots
+```
+
+## Development
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm test` | Run the test suite (parsers, patching, installer fixes, scene, export) |
+| `npm run lint` | Lint with oxlint |
+| `npm run build` | Type-check and build for production |
+| `npm run build:stock -- <dir>` | Regenerate `public/stock` from an extracted dump |
+
+How the renderer and patcher work, and what was learned matching real console screenshots, is in
+[docs/engineering-notes.md](docs/engineering-notes.md).
+
+## Known limitations
+
+- UI strings come from the console's message files, which aren't included; the preview uses English
+  stand-ins.
+- Animations are shown at their resting state, not played.
+- Some content is laid out by code on the console (All Software rows, Settings pages, news cards);
+  the preview reproduces it from the real layouts and measurements.
+- Verified against firmware 23.0.1. Other firmware versions haven't been tested.
+
+## Acknowledgements
+
+- [exelix11/SwitchThemeInjector](https://github.com/exelix11/SwitchThemeInjector): the theme format,
+  installer behaviour and layout documentation this project follows.
+- Example themes from [Themezer](https://themezer.net/): *Purple Skies* by Hsushi and *Vertical OEM*
+  by sodasoba, with layouts by FairTech and others.
+- Nintendo Switch is a trademark of Nintendo. Game titles and cover art shown in the preview belong
+  to their respective owners.

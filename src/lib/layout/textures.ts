@@ -1,15 +1,17 @@
 import { decodeTexture, type BntxTexture, type ImageDataLike } from '../nx/bntx';
 import type { BflytMaterial, BflytPane } from '../nx/bflyt';
 import { paletteColor } from './palette';
+import { renderStockTexture } from '../stock/placeholders';
+import type { StockTexture } from '../stock/stockPack';
 
 /**
  * Turns a picture pane's material + texture into something CSS can draw, the way nn::ui2d does:
  *   color = lerp(material.black, material.white, texture) * vertexColor
- * Results are cached as data URLs per (texture, colors, mirror) combination.
+ * Tinted textures are cached as canvases per (texture, colours, mirror) combination.
  */
 
-const decoded = new WeakMap<BntxTexture, ImageDataLike | null>();
-const urlCache = new Map<string, string>();
+const decoded = new WeakMap<BntxTexture | StockTexture, ImageDataLike | null>();
+const canvasCache = new Map<string, HTMLCanvasElement>();
 
 export type Rgba = [number, number, number, number];
 
@@ -28,7 +30,8 @@ const isGray = (c: Rgba) => Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[
  * near-black ink turns light, near-white plates turn dark gray. Coloured accents are kept.
  */
 export function themeColor(c: Rgba, dark: boolean): Rgba {
-  if (!dark || !isGray(c)) return c;
+  // Translucent black/white are scrims and pills (e.g. "Playing"), not themed ink.
+  if (!dark || !isGray(c) || c[3] < 250) return c;
   const l = luma(c);
   if (l < 0.35) return [235, 235, 235, c[3]];
   if (l > 0.85) return [70, 70, 70, c[3]];
@@ -47,23 +50,27 @@ const isMirror = (w: number) => w === 2 || w === 6 || w === 3 || w === 7;
 const isRepeat = (w: number) => w === 1 || w === 5;
 
 export interface PaneVisual {
-  /** Solid fill (no texture or a 1×1 texture). */
+  /** Solid fill (no texture, a 1×1 texture or a single sampled texel). */
   color?: string;
-  /** Tinted texture, with how to map it onto the pane. */
-  image?: string;
-  backgroundSize?: string;
-  backgroundPosition?: string;
-  backgroundRepeat?: string;
+  /** Tinted texture (material colours applied, mirrored halves expanded). */
+  canvas?: HTMLCanvasElement;
+  /** How the texture maps onto the pane rect, like CSS background-size / -position (px). */
+  bgW?: number;
+  bgH?: number;
+  bgX?: number;
+  bgY?: number;
+  repeatX?: boolean;
+  repeatY?: boolean;
   flipX?: boolean;
   flipY?: boolean;
-  /** Pane uses a format the preview can't decode yet (ASTC). */
+  /** Texture the preview can't decode. */
   unsupported?: string;
 }
 
 export function paneVisual(
   pane: BflytPane,
   material: BflytMaterial | undefined,
-  textures: Map<string, BntxTexture>,
+  textures: Map<string, BntxTexture | StockTexture>,
   w: number,
   h: number,
   dark: boolean,
@@ -87,7 +94,7 @@ export function paneVisual(
     return c[3] < 2 ? null : { color: toCss(c) };
   }
 
-  if (!decoded.has(tex)) decoded.set(tex, decodeTexture(tex));
+  if (!decoded.has(tex)) decoded.set(tex, 'stock' in tex ? renderStockTexture(tex) : decodeTexture(tex));
   const img = decoded.get(tex);
   if (!img) return { unsupported: ref.name };
 
@@ -123,11 +130,11 @@ export function paneVisual(
   const mirrorY = isMirror(ref.wrapT) && outside(v0, v1);
 
   const key = `${ref.name}|${black.join(',')}|${white.join(',')}|${vertex.join(',')}|${mirrorX}|${mirrorY}`;
-  let url = urlCache.get(key);
-  if (!url) {
+  let canvas = canvasCache.get(key);
+  if (!canvas) {
     const W = img.width * (mirrorX ? 2 : 1);
     const H = img.height * (mirrorY ? 2 : 1);
-    const canvas = document.createElement('canvas');
+    canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d')!;
@@ -142,8 +149,7 @@ export function paneVisual(
       }
     }
     ctx.putImageData(out, 0, 0);
-    url = canvas.toDataURL();
-    urlCache.set(key, url);
+    canvasCache.set(key, canvas);
   }
   if (mirrorX) {
     u0 /= 2;
@@ -159,10 +165,13 @@ export function paneVisual(
   const bgW = w / du;
   const bgH = h / dv;
   return {
-    image: url,
-    backgroundSize: `${bgW}px ${bgH}px`,
-    backgroundPosition: `${-Math.min(u0, u1) * bgW}px ${-Math.min(v0, v1) * bgH}px`,
-    backgroundRepeat: `${isRepeat(ref.wrapS) || mirrorX ? 'repeat' : 'no-repeat'} ${isRepeat(ref.wrapT) || mirrorY ? 'repeat' : 'no-repeat'}`,
+    canvas,
+    bgW,
+    bgH,
+    bgX: -Math.min(u0, u1) * bgW,
+    bgY: -Math.min(v0, v1) * bgH,
+    repeatX: isRepeat(ref.wrapS) || mirrorX,
+    repeatY: isRepeat(ref.wrapT) || mirrorY,
     flipX: u1 < u0,
     flipY: v1 < v0,
   };

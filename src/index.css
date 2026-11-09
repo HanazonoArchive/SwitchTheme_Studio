@@ -1,43 +1,136 @@
 @import "tailwindcss";
 
-@layer base {
-  * {
-    box-sizing: border-box;
-    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-  }
+/*
+ * Design tokens. A quiet, neutral tool UI (closer to Figma/Linear than to a landing page):
+ * flat grey panels, 1px borders, one blue accent, 12px text.
+ */
+:root {
+  --bg: #1e1e20;
+  --panel: #252528;
+  --panel-2: #2e2e32;
+  --hover: #333338;
+  --border: #38383d;
+  --canvas: #19191b;
+  --text: #ececef;
+  --text-2: #a8a8b0;
+  --text-3: #75757e;
+  --accent: #2f7cf6;
+  --accent-hover: #4a8ef8;
+  --ok: #3dbb7a;
+  --warn: #e5a13a;
+  --danger: #ef5b5b;
+  color-scheme: dark;
+}
 
-  html, body, #root {
+@layer base {
+  html,
+  body,
+  #root {
     width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    user-select: none;
-    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-    background-color: #0b0d11;
-    color: #f1f5f9;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
   }
-
-  input, button, select, textarea, span, p, h1, h2, h3, h4, div, label {
-    font-family: 'Poppins', sans-serif !important;
+  button {
+    cursor: default;
+  }
+  button:disabled {
+    opacity: 0.35;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
 }
 
-/* OpenReel style clean scrollbars */
+@layer components {
+  .ui-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+  }
+  .ui-btn:hover:not(:disabled) {
+    background: var(--hover);
+  }
+  .ui-btn-primary {
+    background: var(--accent);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 500;
+  }
+  .ui-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .ui-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--text-2);
+  }
+  .ui-icon-btn:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .ui-icon-btn.ui-on {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    color: var(--text);
+  }
+  .ui-input {
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    outline: none;
+    font-size: 12px;
+  }
+  .ui-input:focus {
+    border-color: var(--accent);
+  }
+  .ui-sep {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--border);
+  }
+  /* Canvas: subtle dot grid behind the screen. */
+  .ui-canvas-bg {
+    background-color: var(--canvas);
+    background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+}
+
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0f1217;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #232936;
-  border-radius: 3px;
+  background: #3c3c42;
+  border-radius: 4px;
+  border: 2px solid var(--panel);
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #313a4d;
+  background: #4a4a52;
 }

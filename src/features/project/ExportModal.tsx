@@ -38,10 +38,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-[#101319] border border-[#202532] rounded-lg shadow-2xl overflow-hidden flex flex-col text-xs text-slate-300">
-        <div className="h-12 px-5 border-b border-[#1b1f28] flex items-center justify-between bg-[#0c0e12]">
-          <span className="font-semibold text-sm text-white">Export Theme</span>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1">
+      <div className="w-full max-w-md bg-[var(--panel-2)] border border-[var(--border)] rounded-lg shadow-2xl overflow-hidden flex flex-col text-xs text-[var(--text)]">
+        <div className="h-12 px-5 border-b border-[var(--border)] flex items-center justify-between bg-[var(--panel)]">
+          <span className="font-semibold text-sm text-[var(--text)]">Export Theme</span>
+          <button onClick={onClose} className="text-[var(--text-2)] hover:text-[var(--text)] p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -51,7 +51,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
             <div className="space-y-1.5">
               {checks.flatMap(({ screen, issues }) =>
                 issues.map((i) => (
-                  <div key={screen.id + i.message} className={`flex gap-1.5 text-[11px] ${i.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
+                  <div key={screen.id + i.message} className={`flex gap-1.5 text-[12px] ${i.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
                     {i.level === 'error' ? <XCircle className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
                     <span>{i.message}</span>
                   </div>
@@ -65,40 +65,40 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
             onClick={() =>
               run(async () => downloadBlob(await buildNxTheme(project, activeScreen), `${safeFileName(project.name)} (${activeScreen.name}).nxtheme`))
             }
-            className="w-full text-left p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[#202532]"
+            className="w-full text-left p-3.5 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] hover:border-[var(--accent)] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[var(--border)]"
           >
             <div className="flex items-center gap-3">
-              <FileArchive className="w-6 h-6 text-[#10b981]" />
+              <FileArchive className="w-6 h-6 text-[var(--accent)]" />
               <div>
-                <p className="font-medium text-white text-xs">{activeScreen.name} (.nxtheme)</p>
-                <p className="text-[11px] text-slate-500">Active screen only</p>
+                <p className="font-medium text-[var(--text)] text-xs">{activeScreen.name} (.nxtheme)</p>
+                <p className="text-[12px] text-[var(--text-3)]">Active screen only</p>
               </div>
             </div>
-            <Download className="w-4 h-4 text-slate-400" />
+            <Download className="w-4 h-4 text-[var(--text-2)]" />
           </button>
 
           <button
             disabled={isExporting || exportable === 0}
             onClick={() => run(async () => downloadBlob(await buildThemePack(project, systemLayouts), `${safeFileName(project.name)}.zip`))}
-            className="w-full text-left p-3.5 rounded-lg border border-[#202532] bg-[#141720] hover:border-[#10b981] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[#202532]"
+            className="w-full text-left p-3.5 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] hover:border-[var(--accent)] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[var(--border)]"
           >
             <div className="flex items-center gap-3">
               <PackageCheck className="w-6 h-6 text-emerald-400" />
               <div>
-                <p className="font-medium text-white text-xs">Full theme pack (.zip)</p>
-                <p className="text-[11px] text-slate-500">
+                <p className="font-medium text-[var(--text)] text-xs">Full theme pack (.zip)</p>
+                <p className="text-[12px] text-[var(--text-3)]">
                   {exportable} of {project.screens.length} screens, ready for sd:/themes/
                 </p>
               </div>
             </div>
-            <Download className="w-4 h-4 text-slate-400" />
+            <Download className="w-4 h-4 text-[var(--text-2)]" />
           </button>
 
-          <p className="text-[11px] text-slate-500 leading-relaxed">
+          <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
             Backgrounds are written as a baseline 1280×720 image.jpg with your adjustments applied. Untouched valid images and DXT1 .dds files are copied as-is.
           </p>
-          {error && <div className="p-2 rounded bg-red-950/40 border border-red-500/40 text-red-300 text-[11px]">{error}</div>}
-          {isExporting && <div className="text-[11px] text-slate-400">Building…</div>}
+          {error && <div className="p-2 rounded bg-red-950/40 border border-red-500/40 text-red-300 text-[12px]">{error}</div>}
+          {isExporting && <div className="text-[12px] text-[var(--text-2)]">Building…</div>}
         </div>
       </div>
     </div>

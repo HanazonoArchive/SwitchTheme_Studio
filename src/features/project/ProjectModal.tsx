@@ -83,25 +83,25 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         className="hidden"
       />
 
-      <div className="w-full max-w-lg bg-[#101319] border border-[#202532] rounded-xl shadow-2xl overflow-hidden flex flex-col text-xs text-slate-300">
+      <div className="w-full max-w-lg bg-[var(--panel-2)] border border-[var(--border)] rounded-lg shadow-2xl overflow-hidden flex flex-col text-xs text-[var(--text)]">
         {/* Header */}
-        <div className="h-12 px-5 border-b border-[#1b1f28] flex items-center justify-between bg-[#0c0e12]">
-          <span className="font-semibold text-sm text-white">SwitchTheme Studio Setup</span>
+        <div className="h-12 px-5 border-b border-[var(--border)] flex items-center justify-between bg-[var(--panel)]">
+          <span className="font-semibold text-sm text-[var(--text)]">SwitchTheme Studio Setup</span>
           {canClose && (
-            <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded transition">
+            <button onClick={onClose} className="text-[var(--text-2)] hover:text-[var(--text)] p-1 rounded transition">
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-[#1b1f28] bg-[#0c0e12]">
+        <div className="flex border-b border-[var(--border)] bg-[var(--panel)]">
           <button
             onClick={() => setActiveTab('new')}
             className={`flex-1 py-2.5 font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
               activeTab === 'new'
-                ? 'border-[#10b981] text-[#10b981]'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-[var(--accent)] text-[var(--accent)]'
+                : 'border-transparent text-[var(--text-2)] hover:text-[var(--text)]'
             }`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -111,8 +111,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             onClick={() => setActiveTab('open')}
             className={`flex-1 py-2.5 font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
               activeTab === 'open'
-                ? 'border-[#10b981] text-[#10b981]'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-[var(--accent)] text-[var(--accent)]'
+                : 'border-transparent text-[var(--text-2)] hover:text-[var(--text)]'
             }`}
           >
             <FolderOpen className="w-3.5 h-3.5" />
@@ -122,8 +122,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             onClick={() => setActiveTab('demos')}
             className={`flex-1 py-2.5 font-medium border-b-2 transition flex items-center justify-center gap-1.5 ${
               activeTab === 'demos'
-                ? 'border-[#10b981] text-[#10b981]'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-[var(--accent)] text-[var(--accent)]'
+                : 'border-transparent text-[var(--text-2)] hover:text-[var(--text)]'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -136,43 +136,43 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           {activeTab === 'new' && (
             <div className="space-y-4">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Theme Name</label>
+                <label className="text-[12px] text-[var(--text-2)] block mb-1">Theme Name</label>
                 <input
                   type="text"
                   value={themeName}
                   onChange={(e) => setThemeName(e.target.value)}
-                  className="w-full bg-[#0c0e12] border border-[#232936] rounded px-3 py-2 text-white outline-none focus:border-[#10b981]"
+                  className="w-full bg-[var(--panel)] border border-[var(--border)] rounded px-3 py-2 text-[var(--text)] outline-none focus:border-[var(--accent)]"
                   placeholder="e.g. Horizon Clean Dark"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Author Name</label>
+                <label className="text-[12px] text-[var(--text-2)] block mb-1">Author Name</label>
                 <input
                   type="text"
                   value={authorName}
                   onChange={(e) => setAuthorName(e.target.value)}
-                  className="w-full bg-[#0c0e12] border border-[#232936] rounded px-3 py-2 text-white outline-none focus:border-[#10b981]"
+                  className="w-full bg-[var(--panel)] border border-[var(--border)] rounded px-3 py-2 text-[var(--text)] outline-none focus:border-[var(--accent)]"
                   placeholder="Your handle or username"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1.5">Starter Layout</label>
+                <label className="text-[12px] text-[var(--text-2)] block mb-1.5">Starter Layout</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div
                     onClick={() => setStarterTemplate('vertical')}
                     className={`p-3 rounded-lg border cursor-pointer transition flex flex-col gap-1 ${
                       starterTemplate === 'vertical'
-                        ? 'border-[#10b981] bg-[#10b981]/10 text-white'
-                        : 'border-[#202532] bg-[#141720] text-slate-400 hover:border-slate-600'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text)]'
+                        : 'border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-2)] hover:border-[var(--text-3)]'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-semibold text-xs">
-                      <LayoutGrid className="w-3.5 h-3.5 text-[#10b981]" />
+                      <LayoutGrid className="w-3.5 h-3.5 text-[var(--accent)]" />
                       <span>Vertical OEM</span>
                     </div>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[12px] text-[var(--text-2)]">
                       Start from the Vertical-OEM layout (portrait game cards)
                     </span>
                   </div>
@@ -181,15 +181,15 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     onClick={() => setStarterTemplate('stock')}
                     className={`p-3 rounded-lg border cursor-pointer transition flex flex-col gap-1 ${
                       starterTemplate === 'stock'
-                        ? 'border-[#10b981] bg-[#10b981]/10 text-white'
-                        : 'border-[#202532] bg-[#141720] text-slate-400 hover:border-slate-600'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--text)]'
+                        : 'border-[var(--border)] bg-[var(--panel-2)] text-[var(--text-2)] hover:border-[var(--text-3)]'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-semibold text-xs">
                       <Box className="w-3.5 h-3.5 text-blue-400" />
                       <span>Stock layout</span>
                     </div>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[12px] text-[var(--text-2)]">
                       Home, Lock and All Apps with no changes
                     </span>
                   </div>
@@ -206,11 +206,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                 e.preventDefault();
                 handleFilesSelected(e.dataTransfer.files);
               }}
-              className="border-2 border-dashed border-[#232936] hover:border-[#10b981] rounded-xl p-8 text-center space-y-2 cursor-pointer transition bg-[#0c0e12] group"
+              className="border-2 border-dashed border-[var(--border)] hover:border-[var(--accent)] rounded-lg p-8 text-center space-y-2 cursor-pointer transition bg-[var(--panel)] group"
             >
-              <FileUp className="w-8 h-8 text-slate-500 group-hover:text-[#10b981] mx-auto transition" />
-              <p className="text-xs font-semibold text-white">Click or drag &amp; drop .nxtheme or .zip files</p>
-              <p className="text-[11px] text-slate-400">
+              <FileUp className="w-8 h-8 text-[var(--text-3)] group-hover:text-[var(--accent)] mx-auto transition" />
+              <p className="text-xs font-semibold text-[var(--text)]">Click or drag &amp; drop .nxtheme or .zip files</p>
+              <p className="text-[12px] text-[var(--text-2)]">
                 Pick several .nxtheme files (one per screen) or a Themezer pack .zip
               </p>
             </div>
@@ -220,30 +220,30 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <div className="space-y-2">
               <div
                 onClick={() => handleLoadDemo('vertical')}
-                className="p-3 rounded-lg bg-[#141720] hover:bg-[#181d28] border border-[#202532] hover:border-[#10b981] cursor-pointer transition flex items-center justify-between"
+                className="p-3 rounded-lg bg-[var(--panel-2)] hover:bg-[var(--panel-2)] border border-[var(--border)] hover:border-[var(--accent)] cursor-pointer transition flex items-center justify-between"
               >
                 <div>
-                  <div className="font-semibold text-xs text-white">Vertical-OEM (by sodasoba)</div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="font-semibold text-xs text-[var(--text)]">Vertical-OEM (by sodasoba)</div>
+                  <div className="text-[12px] text-[var(--text-2)]">
                     Layout-only theme: no image, keeps the console background
                   </div>
                 </div>
-                <span className="px-2 py-1 rounded bg-[#10b981]/10 text-[#10b981] font-medium text-[10px]">
+                <span className="px-2 py-1 rounded bg-[var(--accent)]/10 text-[var(--accent)] font-medium text-[12px]">
                   Load
                 </span>
               </div>
 
               <div
                 onClick={() => handleLoadDemo('purpleskies')}
-                className="p-3 rounded-lg bg-[#141720] hover:bg-[#181d28] border border-[#202532] hover:border-[#10b981] cursor-pointer transition flex items-center justify-between"
+                className="p-3 rounded-lg bg-[var(--panel-2)] hover:bg-[var(--panel-2)] border border-[var(--border)] hover:border-[var(--accent)] cursor-pointer transition flex items-center justify-between"
               >
                 <div>
-                  <div className="font-semibold text-xs text-white">Purple Skies (by Hsushi)</div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="font-semibold text-xs text-[var(--text)]">Purple Skies (by Hsushi)</div>
+                  <div className="text-[12px] text-[var(--text-2)]">
                     Image theme: custom backgrounds on 4 screens plus FairTech/Doge layouts
                   </div>
                 </div>
-                <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-medium text-[10px]">
+                <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-medium text-[12px]">
                   Load
                 </span>
               </div>
@@ -251,18 +251,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           )}
 
           {error && (
-            <div className="p-2.5 rounded bg-red-950/40 border border-red-500/40 text-red-300 text-[11px]">
+            <div className="p-2.5 rounded bg-red-950/40 border border-red-500/40 text-red-300 text-[12px]">
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="h-12 px-5 border-t border-[#1b1f28] flex items-center justify-end gap-2 bg-[#0c0e12]">
+        <div className="h-12 px-5 border-t border-[var(--border)] flex items-center justify-end gap-2 bg-[var(--panel)]">
           {canClose && (
             <button
               onClick={onClose}
-              className="px-3 py-1.5 rounded hover:bg-[#161a22] text-slate-400 transition"
+              className="px-3 py-1.5 rounded hover:bg-[var(--panel-2)] text-[var(--text-2)] transition"
             >
               Cancel
             </button>
@@ -271,7 +271,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
             <button
               onClick={handleCreateNewProject}
               disabled={isLoading}
-              className="px-4 py-1.5 rounded bg-[#10b981] hover:bg-[#0ea572] text-[#0c0e12] font-semibold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              className="px-4 py-1.5 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--text)] font-semibold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>{isLoading ? 'Creating...' : 'Create Project'}</span>

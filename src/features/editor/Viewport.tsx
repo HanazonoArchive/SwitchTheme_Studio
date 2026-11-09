@@ -1,293 +1,259 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { PenTool, MonitorPlay, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Grid3x3, Magnet, Minus, Moon, Plus, Scan, Square, Sun } from 'lucide-react';
 import type { ThemeScreen } from '../../types/theme';
-import type { SystemLayout } from '../../lib/layout/systemLayouts';
-import { targetInfo } from '../../lib/layout/targets';
-import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
-import { ExactLayoutRenderer } from '../screens/ExactLayoutRenderer';
-import { STOCK_BG } from '../../lib/theme/stock';
+import type { Scene, SceneNode } from '../../lib/render/scene';
 import type { MockSystemState } from '../../types/simulation';
-import { ViewportControls } from './ViewportControls';
-import { HomeMenuRenderer } from '../screens/HomeMenuRenderer';
-import { LockscreenRenderer } from '../screens/LockscreenRenderer';
-import { AllAppsRenderer } from '../screens/AllAppsRenderer';
+import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
+import { STOCK_BG } from '../../lib/theme/stock';
+import { PixiView } from '../canvas/PixiView';
+import { EditorOverlay, type SnapSettings } from '../canvas/EditorOverlay';
 
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
-  system: SystemLayout | undefined;
-  common?: SystemLayout;
+  scene: Scene | null;
+  mode: 'edit' | 'preview';
   mockState: MockSystemState;
-  activeTopTab: 'editor' | 'motion';
-  selectedKey: string | null;
-  onSelect: (key: string | null) => void;
+  selectedId: string | null;
+  hiddenIds: ReadonlySet<string>;
+  lockedIds: ReadonlySet<string>;
+  snap: SnapSettings;
+  onSnapChange: (s: SnapSettings) => void;
+  onSelect: (node: SceneNode | null) => void;
   onDragPane: (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => void;
+  onResizePane: (key: string, change: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
   onDropFile: (file: File) => void;
   onOpenProjectModal: () => void;
-  onOpenPanes: () => void;
 }
+
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4;
 
 export const Viewport: React.FC<ViewportProps> = ({
   activeScreen,
-  system,
-  common,
+  scene,
+  mode,
   mockState,
-  activeTopTab,
-  selectedKey,
+  selectedId,
+  hiddenIds,
+  lockedIds,
+  snap,
+  onSnapChange,
   onSelect,
   onDragPane,
+  onResizePane,
   onUpdateMockState,
   onDropFile,
   onOpenProjectModal,
-  onOpenPanes,
 }) => {
   const wallpaperUrl = useWallpaperPreview(activeScreen?.wallpaper ?? null, activeScreen?.adjustments ?? { brightness: 1, contrast: 1, dim: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ width: 1280, height: 720 });
-
-  // Pan & Drag state (Left-click hold and drag)
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [size, setSize] = useState({ width: 1280, height: 720 });
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panning = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const [space, setSpace] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const isMouseDownRef = useRef(false);
-  const startPosRef = useRef({ x: 0, y: 0 });
-  const originOffsetRef = useRef({ x: 0, y: 0 });
-  const hasMovedRef = useRef(false);
 
-  // Measure container size
   useEffect(() => {
     if (!containerRef.current) return;
-
-    const updateSize = () => {
-      if (containerRef.current) {
-        setContainerSize({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
-    };
-
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
+    const update = () => containerRef.current && setSize({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
   }, []);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files?.[0]) {
-      onDropFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  // Mouse wheel zoom in/out when hovering over canvas
-  const handleWheel = (e: React.WheelEvent) => {
-    const zoomDelta = e.deltaY < 0 ? 0.05 : -0.05;
-    const currentZoom = mockState.canvasZoom || 1.0;
-    const nextZoom = Math.min(2.5, Math.max(0.4, Number((currentZoom + zoomDelta).toFixed(2))));
-    onUpdateMockState({ canvasZoom: nextZoom });
-  };
-
-  // Left-click hold and drag (pan)
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 0) {
-      isMouseDownRef.current = true;
-      hasMovedRef.current = false;
-      startPosRef.current = { x: e.clientX, y: e.clientY };
-      originOffsetRef.current = { ...panOffset };
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isMouseDownRef.current) {
-      const dx = e.clientX - startPosRef.current.x;
-      const dy = e.clientY - startPosRef.current.y;
-
-      if (!hasMovedRef.current && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
-        hasMovedRef.current = true;
-        setIsPanning(true);
+  // Space held: drag anywhere pans (like Figma).
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.code === 'Space' && !(t && /INPUT|TEXTAREA|SELECT/.test(t.tagName))) {
+        setSpace(true);
+        e.preventDefault();
       }
+    };
+    const up = (e: KeyboardEvent) => e.code === 'Space' && setSpace(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
 
-      if (hasMovedRef.current) {
-        setPanOffset({
-          x: originOffsetRef.current.x + dx,
-          y: originOffsetRef.current.y + dy,
-        });
-      }
-    }
-  };
+  const background = React.useMemo(
+    () => (wallpaperUrl ? { url: wallpaperUrl } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }),
+    [wallpaperUrl, mockState.isDarkTheme],
+  );
 
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (e.button === 0) {
-      isMouseDownRef.current = false;
-      setIsPanning(false);
-    }
-  };
-
-  const handleClickCapture = (e: React.MouseEvent) => {
-    if (hasMovedRef.current) {
-      e.stopPropagation();
-      e.preventDefault();
-      hasMovedRef.current = false;
-    }
-  };
-
-  // Reset pan and zoom to default fit on double click
-  const handleDoubleClick = () => {
-    setPanOffset({ x: 0, y: 0 });
-    onUpdateMockState({ canvasZoom: 1.0 });
-  };
-
-  // If no project is loaded, show clean welcome landing
   if (!activeScreen) {
     return (
-      <section className="flex-1 bg-[#090b0e] flex flex-col items-center justify-center select-none text-center p-8">
-        <div className="max-w-md space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#141720] border border-[#202532] flex items-center justify-center mx-auto text-[#10b981]">
-            <Sparkles className="w-7 h-7" />
-          </div>
-          <h2 className="text-xl font-bold text-white tracking-tight">No Active Theme Project</h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Create a custom Nintendo Switch theme with BFLYT layout editing or open an existing .nxtheme to begin.
-          </p>
-          <button
-            onClick={onOpenProjectModal}
-            className="px-5 py-2.5 rounded-lg bg-[#10b981] hover:bg-[#0ea572] text-[#0c0e12] text-xs font-semibold shadow-lg transition active:scale-95 inline-flex items-center gap-2"
-          >
-            <span>Create or Open Theme</span>
-          </button>
-        </div>
+      <section className="flex-1 bg-[var(--canvas)] flex flex-col items-center justify-center text-center p-8">
+        <h2 className="text-[15px] font-semibold text-[var(--text)]">No theme open</h2>
+        <p className="mt-1.5 text-[12px] text-[var(--text-2)] max-w-xs">Start from the console's stock layout, or open an .nxtheme to edit it.</p>
+        <button onClick={onOpenProjectModal} className="ui-btn ui-btn-primary mt-4">
+          New or open theme
+        </button>
       </section>
     );
   }
 
-  const isEditorMode = activeTopTab === 'editor';
-  const exact = Boolean(system);
+  const w = scene?.width ?? 1280;
+  const h = scene?.height ?? 720;
+  const fit = Math.min((size.width - 64) / w, (size.height - 96) / h);
+  const scale = Math.max(0.05, fit * zoom);
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
-  // Dynamic 16:9 scale with comfortable initial fit
-  const paddingX = 80;
-  const paddingY = 60;
-  const availableWidth = Math.max(320, containerSize.width - paddingX);
-  const availableHeight = Math.max(180, containerSize.height - paddingY);
+  const zoomTo = (z: number) => setZoom(Math.min(MAX_ZOOM / Math.max(fit, 0.01), Math.max(MIN_ZOOM, z)));
+  const onWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom around the cursor.
+      const r = containerRef.current!.getBoundingClientRect();
+      const cx = e.clientX - r.left - size.width / 2 - pan.x;
+      const cy = e.clientY - r.top - size.height / 2 - pan.y;
+      const next = Math.min(MAX_ZOOM / Math.max(fit, 0.01), Math.max(MIN_ZOOM, zoom * Math.exp(-e.deltaY * 0.0025)));
+      const k = next / zoom;
+      setPan({ x: pan.x - cx * (k - 1), y: pan.y - cy * (k - 1) });
+      setZoom(next);
+    } else setPan({ x: pan.x - e.deltaX, y: pan.y - e.deltaY });
+  };
 
-  const baseScale = Math.min(availableWidth / 1280, availableHeight / 720) * 0.88;
-  const finalScale = baseScale * (mockState.canvasZoom || 1.0);
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button === 1 || space || e.target === e.currentTarget) {
+      panning.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+      setIsPanning(true);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      if (e.target === e.currentTarget && e.button === 0 && !space) onSelect(null);
+    }
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p = panning.current;
+    if (p) setPan({ x: p.px + e.clientX - p.x, y: p.py + e.clientY - p.y });
+  };
+  const onPointerUp = () => {
+    panning.current = null;
+    setIsPanning(false);
+  };
 
-  const canvasWidth = 1280 * finalScale;
-  const canvasHeight = 720 * finalScale;
-
+  const games = mockState.games.length;
   return (
-    <section className="flex-1 bg-[#090b0e] flex flex-col min-w-0 overflow-hidden select-none">
-      <div className="h-8 px-4 border-b border-[#1b1f28] flex items-center justify-between bg-[#0c0e12]">
-        <div className="flex items-center gap-2">
-          {isEditorMode ? <PenTool className="w-3 h-3 text-[#10b981]" /> : <MonitorPlay className="w-3 h-3 text-blue-400" />}
-          <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-            {isEditorMode ? 'Theme Editor' : 'Live Simulator'}
-          </span>
-          <span className="text-slate-600">/</span>
-          <span className="text-[11px] text-slate-300 font-medium">{activeScreen.name}</span>
-          <span className="text-slate-600">/</span>
-          <span className="text-[11px] text-slate-400">{activeScreen.wallpaper ? 'Custom background' : 'Stock background'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {exact ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#10b981]/15 text-[#10b981] font-medium" title={`Rendering ${system!.mainLayout} from your ${system!.szsName} (firmware ${system!.firmwareHint})`}>
-              Exact layout · {system!.szsName}
-            </span>
-          ) : (
-            <button
-              onClick={onOpenPanes}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium hover:bg-amber-500/25"
-              title="Positions are a hand-made mock. Load your console's layout file for an exact preview."
-            >
-              Approximate · load {targetInfo(activeScreen.target).szs} for exact
-            </button>
+    <section className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--canvas)] relative">
+      <div
+        ref={containerRef}
+        className="flex-1 relative overflow-hidden ui-canvas-bg"
+        onWheel={onWheel}
+        onPointerDownCapture={(e) => {
+          if (space || e.button === 1) {
+            e.stopPropagation();
+            onPointerDown(e);
+          }
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+          }
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const f = e.dataTransfer.files?.[0];
+          if (f) onDropFile(f);
+        }}
+        style={{ cursor: isPanning ? 'grabbing' : space ? 'grab' : undefined }}
+      >
+        <div
+          className="absolute"
+          style={{
+            width: w * scale,
+            height: h * scale,
+            left: size.width / 2 - (w * scale) / 2 + pan.x,
+            top: size.height / 2 - (h * scale) / 2 + pan.y - 16,
+            boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 30px rgba(0,0,0,0.45)',
+          }}
+        >
+          <div className="absolute left-0 top-0 overflow-hidden" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+            <PixiView scene={scene} background={background} resolution={Math.min(4, dpr * scale)} hiddenIds={hiddenIds} />
+          </div>
+          {scene && (
+            <div className="absolute left-0 top-0" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0', pointerEvents: space ? 'none' : undefined }}>
+              <EditorOverlay
+                scene={scene}
+                scale={scale}
+                mode={mode}
+                selectedId={selectedId}
+                hiddenIds={hiddenIds}
+                lockedIds={lockedIds}
+                showAllOutlines={mockState.wireframeMode}
+                snap={snap}
+                onSelect={onSelect}
+                onDrag={onDragPane}
+                onResize={onResizePane}
+                onFocusGame={(i) => onUpdateMockState({ selectedGameIndex: i })}
+              />
+            </div>
           )}
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onClickCapture={handleClickCapture}
-        onDoubleClick={handleDoubleClick}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        onClick={() => {
-          if (!hasMovedRef.current) onSelect(null);
-        }}
-        className="flex-1 relative overflow-hidden flex items-center justify-center p-6 bg-[#090b0e]"
-        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
-      >
-        <div
-          className="relative rounded overflow-hidden shadow-2xl border border-[#1e232e] bg-black shrink-0 select-none"
-          style={{
-            width: `${canvasWidth}px`,
-            height: `${canvasHeight}px`,
-            transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-          }}
-        >
-          {/* Native 1280x720 Switch display. Editor and simulator render the SAME layers;
-              the editor only adds selection outlines and drag handles. */}
-          <div
-            className="absolute top-0 left-0 overflow-hidden"
-            style={{ width: '1280px', height: '720px', transform: `scale(${finalScale})`, transformOrigin: 'top left' }}
-          >
-            {/* Layer 1: background. A theme without image.jpg keeps the console's own background. */}
-            {wallpaperUrl ? (
-              <img src={wallpaperUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" />
-            ) : (
-              <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }} />
-            )}
-
-            {/* Layer 2: UI */}
-            {exact ? (
-              <ExactLayoutRenderer
-                system={system!}
-                layout={activeScreen.layout}
-                common={common}
-                commonLayout={activeScreen.common}
-                hasWallpaper={Boolean(activeScreen.wallpaper)}
-                mockState={mockState}
-                interactive={isEditorMode}
-                selectedKey={selectedKey}
-                showAllOutlines={isEditorMode && mockState.wireframeMode}
-                viewScale={finalScale}
-                onSelect={onSelect}
-                onDragPane={onDragPane}
-                onUpdateMockState={onUpdateMockState}
-              />
-            ) : (
-              <>
-                {activeScreen.target === 'home' && (
-                  <HomeMenuRenderer
-                    layout={activeScreen.layout}
-                    hideOnlineBtn={activeScreen.layout.HideOnlineBtn ?? true}
-                    mockState={mockState}
-                    interactive={isEditorMode}
-                    selectedKey={selectedKey}
-                    onSelect={onSelect}
-                    onUpdateMockState={onUpdateMockState}
-                  />
-                )}
-                {activeScreen.target === 'lock' && <LockscreenRenderer mockState={mockState} />}
-                {activeScreen.target === 'apps' && <AllAppsRenderer mockState={mockState} />}
-                {!['home', 'lock', 'apps'].includes(activeScreen.target) && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/60 text-lg">
-                    Load {targetInfo(activeScreen.target).szs} to preview this screen's layout
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+      {/* Canvas toolbar */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 h-9 px-1 rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[var(--text-2)]">
+        <button className="ui-icon-btn" title="Zoom out (Ctrl + wheel)" onClick={() => zoomTo(zoom / 1.25)}>
+          <Minus className="w-3.5 h-3.5" />
+        </button>
+        <button className="h-7 px-1.5 rounded-md text-[12px] tabular-nums hover:bg-[var(--hover)] min-w-[46px]" title="Fit (double-click the canvas)" onClick={() => (setZoom(1), setPan({ x: 0, y: 0 }))}>
+          {Math.round(scale * 100)}%
+        </button>
+        <button className="ui-icon-btn" title="Zoom in" onClick={() => zoomTo(zoom * 1.25)}>
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+        <button className="ui-icon-btn" title="Fit to screen" onClick={() => (setZoom(1), setPan({ x: 0, y: 0 }))}>
+          <Scan className="w-3.5 h-3.5" />
+        </button>
+        <span className="ui-sep" />
+        {mode === 'edit' && (
+          <>
+            <button className={`ui-icon-btn ${snap.grid ? 'ui-on' : ''}`} title={`Grid ${snap.gridSize}px (snap to grid)`} onClick={() => onSnapChange({ ...snap, grid: !snap.grid })}>
+              <Grid3x3 className="w-3.5 h-3.5" />
+            </button>
+            <select
+              className="h-7 rounded-md bg-transparent text-[12px] px-1 hover:bg-[var(--hover)] outline-none"
+              value={snap.gridSize}
+              title="Grid size"
+              onChange={(e) => onSnapChange({ ...snap, gridSize: +e.target.value })}
+            >
+              {[4, 8, 10, 16, 20, 32, 40].map((g) => (
+                <option key={g} value={g} className="bg-[var(--panel)]">
+                  {g}
+                </option>
+              ))}
+            </select>
+            <button className={`ui-icon-btn ${snap.guides ? 'ui-on' : ''}`} title="Snap to other layers and the screen (hold Alt to move freely)" onClick={() => onSnapChange({ ...snap, guides: !snap.guides })}>
+              <Magnet className="w-3.5 h-3.5" />
+            </button>
+            <button className={`ui-icon-btn ${mockState.wireframeMode ? 'ui-on' : ''}`} title="Show every layer's outline" onClick={() => onUpdateMockState({ wireframeMode: !mockState.wireframeMode })}>
+              <Square className="w-3.5 h-3.5" />
+            </button>
+            <span className="ui-sep" />
+          </>
+        )}
+        <button className="ui-icon-btn" title={mockState.isDarkTheme ? 'Console theme: Basic Black' : 'Console theme: Basic White'} onClick={() => onUpdateMockState({ isDarkTheme: !mockState.isDarkTheme })}>
+          {mockState.isDarkTheme ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+        </button>
+        <button className="ui-icon-btn" title="Focus previous game" onClick={() => onUpdateMockState({ selectedGameIndex: Math.max(0, mockState.selectedGameIndex - 1) })}>
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <span className="text-[12px] tabular-nums w-10 text-center" title="Focused game">
+          {mockState.selectedGameIndex + 1}/{games}
+        </span>
+        <button className="ui-icon-btn" title="Focus next game" onClick={() => onUpdateMockState({ selectedGameIndex: Math.min(games - 1, mockState.selectedGameIndex + 1) })}>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
       </div>
-
-      {/* Viewer Controls */}
-      <ViewportControls mockState={mockState} onUpdateMockState={onUpdateMockState} />
     </section>
   );
 };

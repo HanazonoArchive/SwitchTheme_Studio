@@ -44,6 +44,8 @@ export const PALETTE: Record<number, Pair> = {
   88: same('e60012'), // News
   90: same('f39800'), // Nintendo eShop
   92: same('1e7ae6'), // Album
+  // Custom applet icons (SwitchThemesCommon sets C_W 100): white-ish on Basic Black.
+  100: { light: c('3c3c3c'), dark: c('ffffff') },
   101: same('ff6400'),
   110: same('00b26b'), // GameShare
 };

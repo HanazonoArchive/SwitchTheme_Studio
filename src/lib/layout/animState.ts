@@ -39,6 +39,14 @@ const PER_LAYOUT: Record<string, Step[]> = {
   FlcCntMain: [['ContentsIn', 'end'], ['RefreshIn', 'end']],
 };
 
+/**
+ * Panes whose opacity qlaunch sets in code, overriding animations: game icons fade in as the row
+ * appears (themes that set N_Root's alpha in Inactive, like PS5 by Rodel, still show their icons).
+ */
+const CODE_ALPHA: Record<string, string[]> = {
+  'blyt/RdtBtnIconGame.bflyt': ['N_Root'],
+};
+
 /** Shown or hidden by code rather than animations; hidden in the idle preview. */
 export const RUNTIME_HIDDEN: Record<string, string[]> = {
   'blyt/RdtBase.bflyt': ['L_ChildLock'],
@@ -129,8 +137,8 @@ export function restingAnimations(sys: SystemLayout, layoutFile: string, state: 
     // User_00: one player on the suspended game: their picture shows, the pill moves right of it.
     steps.push(['SuspendIn', 'end'], ['SuspendText', 'end'], ['User_00', 'end']);
   }
-  // Popup balloons are closed when idle.
-  if (/Balloon/.test(base)) steps.push(['Out', 'end']);
+  // Popup balloons are closed when idle; the focused game's title balloon is open.
+  if (/Balloon/.test(base)) steps.push(state.focused ? ['In', 'end'] : ['Out', 'end']);
   return steps
     .map(([suffix, at]) => ({ name: `anim/${base}_${suffix}.bflan`, at }))
     .filter((s) => sys.animations.has(s.name));
@@ -166,7 +174,9 @@ export function applyRestingState(
             const v = curveValue(c, step.at);
             if (v === undefined) continue;
             if (tag.type === 'FLVI' && c.target === 0) pane.visible = v >= 0.5;
-            else if (tag.type === 'FLVC' && c.target === 16) pane.alpha = Math.max(0, Math.min(255, v));
+            else if (tag.type === 'FLVC' && c.target === 16) {
+              if (!CODE_ALPHA[layoutFile]?.includes(pane.name)) pane.alpha = Math.max(0, Math.min(255, v));
+            }
             else if (tag.type === 'FLPA') {
               const k = FLPA[c.target];
               if (k === 'tx') pane.position = { ...pane.position, X: v };

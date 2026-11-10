@@ -1,6 +1,7 @@
 import type { BflytMaterial, BflytPane, PaneKind } from '../nx/bflyt';
 import type { LayoutPatch } from '../layout/patch';
-import { applyLayoutToBflyt, applyMaterialPatches, findPanePatch, paneKey } from '../layout/patch';
+import { applyLayoutToBflyt, applyMaterialPatches, findPanePatch, paneKey, type LayoutFilePatch } from '../layout/patch';
+import type { AppletIcon } from '../layout/appletIcons';
 import { fileLayers } from '../layout/paneModel';
 import { applyRestingState, type InstanceState, type MaterialOverride } from '../layout/animState';
 import { resolvePartLayout, type SystemLayout } from '../layout/systemLayouts';
@@ -27,7 +28,7 @@ import { mul, type Mat } from './matrix';
 
 export type Content =
   | { type: 'visual'; v: PaneVisual; radius?: number; shadow?: boolean; border?: Border; masks?: { v: PaneVisual | null; x: number; y: number; w: number; h: number }[] }
-  | { type: 'image'; url: string; x: number; y: number; w: number; h: number; radius?: number; border?: Border }
+  | { type: 'image'; url: string; x: number; y: number; w: number; h: number; radius?: number; border?: Border; tint?: string; fit?: 'cover' | 'fill' }
   | { type: 'canvas'; sig: string; x: number; y: number; w: number; h: number; draw: (c: CanvasRenderingContext2D) => void };
 
 /** Outline drawn by qlaunch's shader from the pane's user data (S_Border*), inside the pane. */
@@ -99,7 +100,8 @@ const SCROLL_TOP = 88;
 const SCROLL_BOTTOM = 648;
 export const CURSOR = '#00c3e3';
 /** The game shown as suspended ("Playing"). */
-const RUNNING_GAME = 0;
+/** The suspended game (the first one), when the console has one. */
+const SUSPENDED_GAME = 0;
 
 /**
  * Layouts qlaunch instantiates by code, and where. The first entry whose layout exists in the
@@ -146,6 +148,12 @@ const BACKGROUND_PANES = new Set([
 const STATE_PANE = /(Touch|Decide|Effect|Cursor|Focus|Grow|Glow|Press|Hover|Flash|Blink|Hilight|Highlight|InnerCursor)/;
 
 const INSTANCE_LAYOUTS = new Set([ICON_LAYOUT, 'blyt/FlcBtnIconGame.bflyt']);
+/** Title balloons of the game icons: open ('#f') on the focused game, closed elsewhere. */
+const BALLOON_LAYOUTS = new Set(['blyt/RdtBalloon.bflyt', 'blyt/FlcBalloon.bflyt']);
+/** Panes of a title balloon that qlaunch sizes to the title's width. */
+const BALLOON_SIZED = new Set(['N_Size', 'N_Scissor', 'N_Offset', 'P_Reset', 'N_Scroll', 'T_Main', 'W_Fade', 'P_Color', 'P_Line']);
+/** Room around the title on a balloon's plate (measured on All Software). */
+const BALLOON_PAD = 40;
 const INSTANCE_VARIANTS: [string, InstanceState][] = [
   ['#f', { focused: true }],
   ['#r', { running: true }],
@@ -205,6 +213,8 @@ export interface Source {
   layout: LayoutPatch;
   editable: boolean;
   masks: Map<string, MaskInfo>;
+  /** The theme's custom applet / lock icons. */
+  icons: AppletIcon[];
 }
 
 /** Per-file cache so a drag only re-patches the file being edited. */
@@ -213,9 +223,12 @@ const fileCache = new WeakMap<
   Map<string, { sig: string; tree: BflytPane | null; mats: Map<string, MaterialOverride>; materials: BflytMaterial[]; masks: MaskInfo | null }>
 >();
 
-function patchedFile(sys: SystemLayout, layout: LayoutPatch, name: string, editable: boolean, resting: boolean, variant: InstanceState | null) {
+function patchedFile(sys: SystemLayout, layout: LayoutPatch, name: string, editable: boolean, resting: boolean, variant: InstanceState | null, iconLayers: LayoutFilePatch[] = []) {
   const f = sys.layouts.get(name)!;
-  const layers = editable ? fileLayers(layout, sys, name) : layout.Files?.filter((x) => x.FileName === name);
+  // Custom icons' patches go first: the installer applies them before the theme's layout.
+  const ownIcons = iconLayers.filter((l) => l.FileName === name);
+  const themeLayers = editable ? fileLayers(layout, sys, name) : layout.Files?.filter((x) => x.FileName === name);
+  const layers = ownIcons.length ? [...ownIcons, ...(themeLayers ?? [])] : themeLayers;
   const anims = layout.Anims?.filter((a) => a.FileName.includes(name.replace(/^blyt\//, '').replace(/\.bflyt$/, '')));
   const sig = JSON.stringify([layers, anims, resting, variant, editable, layout.HideOnlineBtn, layout.TargetFirmware]);
   let cache = fileCache.get(sys);
@@ -270,6 +283,7 @@ function layoutHud(trees: Map<string, BflytPane | null>, layout: LayoutPatch) {
       let x = chain[0]!.position.X - width;
       for (let i = 1; i < chain.length; i++) {
         const p = chain[i]!;
+        // A theme's own position wins (Purple Skies moves the clock to the top on firmware 23).
         if (!findPanePatch(layout, 'blyt/Hud.bflyt', p.name)?.Position) p.position = { ...p.position, X: x };
         x = p.position.X - p.size.X;
       }
@@ -280,23 +294,42 @@ function layoutHud(trees: Map<string, BflytPane | null>, layout: LayoutPatch) {
   if (gauge && !findPanePatch(layout, 'blyt/BatteryConsole.bflyt', 'P_GaugeNml')?.Size) gauge.size = { ...gauge.size, X: (gauge.size.X * HUD_BATTERY) / 100 };
 }
 
-export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boolean, editable: boolean): Source {
+export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boolean, editable: boolean, icons: AppletIcon[] = []): Source {
+  const iconLayers = icons.map((i) => i.slot.patch);
   const trees = new Map<string, BflytPane | null>();
   const masks = new Map<string, MaskInfo>();
   const mats = new Map<string, Map<string, MaterialOverride>>();
   const materials = new Map<string, BflytMaterial[]>();
   for (const name of sys.layouts.keys()) {
-    const e = patchedFile(sys, layout, name, editable, resting, null);
+    const e = patchedFile(sys, layout, name, editable, resting, null, iconLayers);
     trees.set(name, e.tree);
     mats.set(name, e.mats);
     materials.set(name, e.materials);
     if (e.masks) masks.set(name, e.masks);
+    if (resting && BALLOON_LAYOUTS.has(name)) {
+      const v = patchedFile(sys, layout, name, editable, resting, { focused: true }, iconLayers);
+      trees.set(name + '#f', v.tree);
+      mats.set(name + '#f', v.mats);
+    }
     if (resting && INSTANCE_LAYOUTS.has(name)) {
       for (const [suffix, state] of INSTANCE_VARIANTS) {
-        const v = patchedFile(sys, layout, name, editable, resting, state);
+        const v = patchedFile(sys, layout, name, editable, resting, state, iconLayers);
         trees.set(name + suffix, v.tree);
         mats.set(name + suffix, v.mats);
       }
+    }
+  }
+  // The User page navigation is a list stacked by code too: each section starts where the one
+  // above it ends (N_Top, then N_Account, N_FrdList...), so a theme's Y for a section is replaced.
+  // Lava Lamp moves N_Account to Y -340, and the console still shows "Profile" at the top.
+  const nav = trees.get('blyt/MypNav.bflyt');
+  const navRoot = nav && findChild(nav, 'N_Root');
+  if (navRoot) {
+    let y = 0;
+    for (const c of navRoot.children) {
+      if (c.kind !== 'pan1' || c.name === 'N_Btm' || !c.visible) continue;
+      c.position = { ...c.position, Y: y };
+      y -= c.size.Y * c.scale.Y;
     }
   }
   // All Software is a list laid out by code: the rows stack below the N_Top spacer, each as tall
@@ -317,8 +350,10 @@ export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boo
       r.position = { ...r.position, Y: -(top + r.size.Y / 2) };
       top += r.size.Y;
     }
-    // Sort label: with no group filter only the sort order shows, at the right edge.
+    // Sort label: with no group filter only the sort order shows, at the right edge. It goes with
+    // the sort button (themes hide L_BtnSort to remove both).
     const sort = findChild(flc, 'N_Sort');
+    if (sort && findChild(flc, 'L_BtnSort')?.visible === false) sort.visible = false;
     if (sort) {
       for (const n of ['T_00', 'N_Padding_00', 'P_Mark', 'N_Padding_01']) {
         const p = findChild(sort, n);
@@ -329,7 +364,7 @@ export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boo
     }
   }
   layoutHud(trees, layout);
-  return { sys, trees, mats, materials, textures: appletTextures(sys, layout), layout, editable, masks };
+  return { sys, trees, mats, materials, textures: appletTextures(sys, layout), layout, editable, masks, icons };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -367,7 +402,22 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
   const dark = mock.isDarkTheme;
   const ink = toCss(paletteColor(9, dark)!);
   const selectedGame = mock.selectedGameIndex;
+  const runningGame = mock.gameSuspended === false ? -1 : SUSPENDED_GAME;
   const target = system.target;
+  // Focus cursor colour from Cursor3's P_Main (its palette colour, or the material's white colour
+  // when a theme sets C_W to 0, e.g. the white cursors of Zhi's themes).
+  const cursor = (() => {
+    for (const src of [main, common]) {
+      const tree = src?.trees.get('blyt/Cursor3.bflyt');
+      const p = tree && findChild(tree, 'P_Main');
+      if (!src || !p) continue;
+      const cw = p.userData?.C_W?.[0];
+      if (cw) return paletteColor(cw, dark) ? toCss(paletteColor(cw, dark)!) : CURSOR;
+      const mat = src.materials.get('blyt/Cursor3.bflyt')?.[p.materialIndex ?? -1];
+      return mat ? toCss(parseLayoutColor(mat.white)) : CURSOR;
+    }
+    return CURSOR;
+  })();
   const flat: SceneNode[] = [];
 
   // Home row scrolling: keep the cursor inside the visible window like qlaunch does.
@@ -395,7 +445,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
   const textColor = (pane: BflytPane) => {
     // A colour set by the theme wins over the system palette.
     if (pane.fontColorPatched && pane.fontColor) return toCss(parseLayoutColor(pane.fontColor));
-    const c = paletteColor(pane.userData?.C_W?.[0], dark);
+    const c = pane.userData?.C_W?.[0] ? paletteColor(pane.userData.C_W[0], dark) : undefined;
     if (c) return toCss(c);
     // No palette colour: white or coloured text keeps its own colour (e.g. titles on a dark scrim);
     // neutral dark text follows the theme's ink.
@@ -426,6 +476,18 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     radius: round ? Math.min(w, h) / 2 : (pane.userData?.S_RoundRadius?.[0] ?? 0) || undefined,
     border: borderOf(pane),
   });
+  /** An open title balloon is as wide as the focused game's title (plus room on its plate). */
+  const balloonWidth = (pane: BflytPane, ctx: Ctx): number | undefined => {
+    if (!BALLOON_LAYOUTS.has(ctx.file) || ctx.variant !== '#f' || !BALLOON_SIZED.has(pane.name)) return undefined;
+    const title = mock.games[selectedGame]?.title;
+    const t = ctx.src.trees.get(ctx.file + ctx.variant);
+    const tm = t && findChild(t, 'T_Main');
+    if (!title || !tm) return undefined;
+    const tw = Math.ceil(draw.measure(title, balloonFont(tm))) + 4;
+    return pane.name === 'P_Line' ? tw + BALLOON_PAD : tw;
+  };
+  /** Balloon titles: the glyph width (fontSize.X) sets the size; matches console screenshots. */
+  const balloonFont = (pane: BflytPane) => (pane.fontSize?.X ?? 24) * 0.9;
   const fontSize = (pane: BflytPane, fallback: number) => (pane.fontSize?.Y ?? fallback) * 0.85;
 
   const dynamicText = (ctx: Ctx, name: string): string | undefined => {
@@ -435,6 +497,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     if (target === 'user' && ctx.file === 'blyt/TextH1.bflyt' && name === 'T_00') return mock.users[0]?.name;
     if (ctx.file === 'blyt/MypBtnEditName.bflyt' && name === 'T_Name') return mock.users[0]?.name;
     if (ctx.file === 'blyt/MypBtnPresence.bflyt' && name === 'T_Game_00') return mock.games[selectedGame]?.title;
+    if (BALLOON_LAYOUTS.has(ctx.file) && ctx.variant === '#f') return name === 'T_Main' ? mock.games[selectedGame]?.title : name === 'T_Sub' ? '' : undefined;
     return undefined;
   };
   const textFor = (ctx: Ctx, name: string): string | undefined =>
@@ -462,9 +525,33 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const game = (i: number | null | undefined) => (i !== null && i !== undefined ? mock.games[i] : undefined);
 
     if (pane.kind === 'pic1' || pane.kind === 'wnd1') {
+      // A custom icon from the theme replaces the texture (UVs reset to the whole picture).
+      const icon = ctx.src.icons.find((i) => i.slot.file === ctx.file && i.slot.pane === pane.name);
+      if (icon) {
+        const c = icon.slot.mono ? toCss(paletteColor(pane.userData?.C_W?.[0], dark) ?? paletteColor(100, dark)!) : undefined;
+        return { type: 'image', url: icon.url, x: 0, y: 0, w, h, tint: c, fit: 'fill' };
+      }
       if ((pane.name === 'P_IconGame' || pane.name === 'P_Icon') && ctx.iconIndex !== null) {
         const g = game(ctx.iconIndex);
         if (g) return image(g.coverUrl, w, h, rr);
+      }
+      // Player select "add user" button: qlaunch sets a plus icon on the icon-only button.
+      if (pane.name === 'P_Image' && ctx.file === 'blyt/BtnLineIconOnly.bflyt') {
+        // Other icon-only buttons get their icon from code too; without it the dummy texture would show.
+        if (ctx.part !== 'L_BtnAdd') return null;
+        const col = textColor(pane);
+        return canvasContent(`plus${col}`, 0, 0, w, h, (c) => {
+          c.strokeStyle = col;
+          c.lineWidth = Math.max(2, w / 14);
+          c.lineCap = 'round';
+          c.beginPath();
+          c.arc(w / 2, h / 2, w * 0.36, 0, Math.PI * 2);
+          c.moveTo(w / 2, h * 0.32);
+          c.lineTo(w / 2, h * 0.68);
+          c.moveTo(w * 0.32, h / 2);
+          c.lineTo(w * 0.68, h / 2);
+          c.stroke();
+        });
       }
       if (pane.name === 'P_Pict' && ctx.file === 'blyt/RdtBtnChangeUser.bflyt') {
         return canvasContent('changeuser', w / 2 - 14, h / 2 - 14, 160, 28, (c) => draw.glyphLabel(c, 0, 14, 'Y', 'Change User', 18, 20, CURSOR, '#fff', CURSOR));
@@ -538,26 +625,14 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       // The cursor follows the rounded corners of what it frames (a theme rounding the icons).
       const framed = ['P_IconGame', 'P_PictBase'].map((n) => ctx.src.trees.get(ctx.file + ctx.variant) && findChild(ctx.src.trees.get(ctx.file + ctx.variant)!, n)).find(Boolean);
       const r = Math.min(framed?.userData?.S_RoundRadius?.[0] ?? 0, Math.min(w, h) / 2);
-      return canvasContent(`cursor|${w}x${h}|${r}`, -14, -14, w + 28, h + 28, (c) => draw.cursor(c, 14, 14, w, h, CURSOR, r));
+      return canvasContent(`cursor|${w}x${h}|${r}|${cursor}`, -14, -14, w + 28, h + 28, (c) => draw.cursor(c, 14, 14, w, h, cursor, r));
     }
 
     const digit = hudDigit(ctx, pane);
     if (digit) return canvasContent(`digit|${digit}|${ink}|${w}x${h}`, 0, 0, w, h, (c) => draw.hudGlyph(c, digit, w, h, ink));
 
-    // The title balloon (hidden when the theme hides its L_Balloon part).
-    if (pane.name === 'N_Tip' && (ctx.file === ICON_LAYOUT || ctx.file === 'blyt/FlcBtnIconGame.bflyt') && ctx.iconIndex === selectedGame && findChild(pane, 'L_Balloon')?.visible !== false) {
-      const g = game(selectedGame);
-      if (g) {
-        const plate = ctx.file === 'blyt/FlcBtnIconGame.bflyt';
-        const size = plate ? 22 : 24;
-        const tw = draw.measure(g.title, size);
-        const bw = tw + (plate ? 24 : 0);
-        const bh = size + (plate ? 18 : 6);
-        return canvasContent(`tip|${g.title}|${plate}|${dark}`, w / 2 - bw / 2, h - bh - (plate ? 14 : 0), bw, bh + (plate ? 10 : 0), (c) => draw.tip(c, g.title, bw, bh, size, CURSOR, plate, dark));
-      }
-    }
-
-    if (pane.name === 'N_Header' && ctx.file === 'blyt/FlcCntMain.bflyt') {
+    // The "All Software" title belongs to L_Header (themes hide it there).
+    if (pane.name === 'N_Header' && ctx.file === 'blyt/FlcCntMain.bflyt' && findChild(pane, 'L_Header')?.visible !== false) {
       return canvasContent(`appsheader|${ink}`, -640 + 34, 52 - 24, 300, 48, (c) => draw.gridTitle(c, 'All Software', 28, ink));
     }
 
@@ -591,14 +666,16 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       if (mi?.alphaOnly.has(pane.name) && !tintFrom) return null;
       let color = textColor(pane);
       if (tintFrom) {
-        const fileData = ctx.src.sys.layouts.get(ctx.file);
-        const tp = fileData?.byName.get(tintFrom);
+        // The theme's version of the tint pane (its palette colour may be patched).
+        const tree = ctx.src.trees.get(ctx.file + ctx.variant) ?? ctx.src.trees.get(ctx.file);
+        const tp = tree ? findChild(tree, tintFrom) : undefined;
         const mat = tp && ctx.src.materials.get(ctx.file)?.[tp.materialIndex ?? -1];
-        const v = tp && mat ? paneVisual(tp, mat, ctx.src.textures, 1, 1, dark) : null;
+        // Palette colours follow the system theme; a plain material colour is used as authored.
+        const v = tp && mat ? paneVisual(tp, mat, ctx.src.textures, 1, 1, dark && !!tp.userData?.C_W?.[0]) : null;
         if (v?.color) color = v.color;
       }
       const paragraph = text.length > 60;
-      const size = fontSize(pane, Math.min(h, 24)) * (paragraph ? 0.8 : 1);
+      const size = BALLOON_LAYOUTS.has(ctx.file) ? balloonFont(pane) : fontSize(pane, Math.min(h, 24)) * (paragraph ? 0.8 : 1);
       const padLeft = pane.name === 'T_00' && HEADER_FILES.has(ctx.file) && (target === 'set' || target === 'user' || target === 'news') ? 62 : 0;
       const layout = draw.layoutText(text, size, w - padLeft, h, pane.textAlignX ?? 0, pane.textAlignY ?? 0, paragraph, Boolean(dyn));
       return canvasContent(`txt|${text}|${size}|${color}|${w}x${h}|${pane.textAlignX}|${pane.textAlignY}|${paragraph}|${dyn ? 1 : 0}|${padLeft}`, layout.x + padLeft, layout.y, layout.w, layout.h, (c) =>
@@ -613,8 +690,15 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     if (hasWallpaper && BACKGROUND_PANES.has(key) && (ctx.file !== 'blyt/BaseTop.bflyt' || target === 'user')) return null;
     const accountMatch = /^L_BtnAccount_(\d+)$/.exec(pane.name);
     const pslMatch = ctx.file === 'blyt/PslSelectSinglePlayer.bflyt' ? /^N_BtnData_(\d+)$/.exec(pane.name) : null;
+    // Lock screen: the suspended game's Resume button, or the HOME button when nothing is suspended.
+    const lockResume =
+      ctx.file === 'blyt/EntMain.bflyt' && (pane.name === 'L_BtnGame' || pane.name === 'L_BtnSystemApplet')
+        ? (pane.name === 'L_BtnGame') === (runningGame >= 0) && findPanePatch(ctx.src.layout, ctx.file, pane.name)?.Visible !== false
+        : null;
     const runtimeVisible =
-      accountMatch !== null
+      lockResume !== null
+        ? lockResume
+        : accountMatch !== null
         ? parseInt(accountMatch[1], 10) < mock.users.length && findPanePatch(ctx.src.layout, ctx.file, pane.name)?.Visible !== false
         : pslMatch !== null
           ? parseInt(pslMatch[1], 10) < mock.users.length
@@ -631,12 +715,15 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const hidden = (runtimeVisible ?? pane.visible) === false || pane.scale.X === 0 || pane.scale.Y === 0;
 
     const m = ctx.magnify;
-    const w = pane.partsMagnify === 'ignore' ? pane.size.X : pane.size.X * m.x;
+    const sizeX = balloonWidth(pane, ctx) ?? pane.size.X;
+    const w = pane.partsMagnify === 'ignore' ? sizeX : sizeX * m.x;
     const h = pane.partsMagnify === 'ignore' ? pane.size.Y : pane.size.Y * m.y;
-    const a = realAnchors(pane);
+    // An open title balloon is centred on its icon by code (qlaunch scrolls long titles inside it).
+    const centred = sizeX !== pane.size.X;
+    const a = centred ? { ...realAnchors(pane), originX: 0, parentX: 0 } : realAnchors(pane);
     // IgnorePartsMagnify panes keep their own size and offset; the rest scale with the part.
     const pm = pane.partsMagnify === 'ignore' ? { x: 1, y: 1 } : m;
-    const x = anchor(a.parentX, parentW) * m.x + posX * pm.x;
+    const x = anchor(a.parentX, parentW) * m.x + (centred ? 0 : posX) * pm.x;
     const y = anchor(a.parentY, parentH) * m.y - pane.position.Y * pm.y;
     const rotation = -pane.rotation.Z;
     const rad = (rotation * Math.PI) / 180;
@@ -699,14 +786,19 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const after: SceneNode[] = [];
     if (!hidden && pane.kind === 'prt1' && ctx.depth < MAX_PART_DEPTH && hudDigit(ctx, pane) === undefined) {
       const partFile = resolvePartLayout(ctx.src.sys, pane);
-      const partRoot = partFile ? ctx.src.trees.get(partFile) : null;
+      // The focused game's title balloon is open.
+      const partVariant = partFile && BALLOON_LAYOUTS.has(partFile) && ctx.variant.includes('f') && ctx.src.trees.get(partFile + '#f') ? '#f' : '';
+      const partRoot = partFile ? ctx.src.trees.get(partFile + partVariant) : null;
       if (partFile && partRoot) {
         const ps = pane.partScale ?? { X: 1, Y: 1 };
+        // A part's own RootPane is replaced by the prt1 pane: its visibility and transform (which
+        // themes sometimes patch, e.g. hiding HudTime's RootPane) have no effect on the console.
+        const root: BflytPane = { ...partRoot, visible: true, alpha: 255, position: { X: 0, Y: 0, Z: 0 }, rotation: { X: 0, Y: 0, Z: 0 }, scale: { X: 1, Y: 1 } };
         const n = node(
-          partRoot,
+          root,
           w / ps.X,
           h / ps.Y,
-          { ...childCtx, part: pane.name, path: `${ctx.path}/${pane.name}`, variant: '', magnify: { x: ps.X * m.x, y: ps.Y * m.y }, file: partFile, depth: ctx.depth + 1 },
+          { ...childCtx, part: pane.name, path: `${ctx.path}/${pane.name}`, variant: partVariant, magnify: { x: ps.X * m.x, y: ps.Y * m.y }, file: partFile, depth: ctx.depth + 1 },
           childWorld,
           id,
         );
@@ -718,7 +810,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       const maxIcons = ctx.file === 'blyt/RdtBase.bflyt' ? 12 : Infinity;
       const idx = childCtx.iconIndex;
       const wanted = !injection.icon || idx! < Math.min(maxIcons, mock.games.length);
-      const variant = injection.icon && idx !== null ? `${idx === selectedGame ? 'f' : ''}${idx === RUNNING_GAME ? 'r' : ''}` : '';
+      const variant = injection.icon && idx !== null ? `${idx === selectedGame ? 'f' : ''}${idx === runningGame ? 'r' : ''}` : '';
       const usedVariant = variant && ctx.src.trees.get(`${injection.layout}#${variant}`) ? `#${variant}` : '';
       const injRoot = wanted ? ctx.src.trees.get(injection.layout + usedVariant) : null;
       if (injRoot) {

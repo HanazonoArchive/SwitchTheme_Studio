@@ -86,7 +86,8 @@ export function paneVisual(
   if (!material) return null;
   const vertex = averageVertexColor(pane);
   // System palette (C_W / C_B user data) wins; otherwise the material colours, recoloured for the theme.
-  const cw = paletteColor(pane.userData?.C_W?.[0], dark);
+  // C_W 0 means "no palette colour": the material's own white colour stays.
+  const cw = pane.userData?.C_W?.[0] ? paletteColor(pane.userData.C_W[0], dark) : undefined;
   const cb = paletteColor(pane.userData?.C_B?.[0], dark);
   const matWhite = parseLayoutColor(material.white);
   const black = cb ?? themeColor(parseLayoutColor(material.black), dark);

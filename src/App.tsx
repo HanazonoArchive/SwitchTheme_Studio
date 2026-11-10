@@ -20,9 +20,11 @@ import { useHistory } from './lib/state/useHistory';
 import { editPane, hasLayoutChanges, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
 import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
+import { loadAppletIcons, type AppletIcon } from './lib/layout/appletIcons';
 import { loadStockLayouts } from './lib/stock/stockPack';
 import { isCommonSzs, loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
 import { loadWallpaper } from './lib/theme/images';
+import { STOCK_BG } from './lib/theme/stock';
 import { newScreen } from './lib/theme/nxtheme';
 import type { ScreenTarget } from './types/theme';
 
@@ -99,7 +101,23 @@ export function App() {
 
   /* ------------------------------ scene ------------------------------ */
 
-  const mainSource = useMemo(() => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true) : null), [activeSystem, activeScreen?.layout]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The theme's custom icons (album.png, lock.png, ...), decoded for the preview.
+  const [icons, setIcons] = useState<{ files: ThemeScreen['extraFiles']; icons: AppletIcon[] } | null>(null);
+  const extraFiles = activeScreen?.extraFiles;
+  useEffect(() => {
+    if (!activeScreen || !extraFiles?.length) return;
+    let cancelled = false;
+    loadAppletIcons(activeScreen).then((list) => !cancelled && setIcons({ files: extraFiles, icons: list }));
+    return () => {
+      cancelled = true;
+    };
+  }, [extraFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  const activeIcons = useMemo(() => (icons && icons.files === extraFiles ? icons.icons : []), [icons, extraFiles]);
+
+  const mainSource = useMemo(
+    () => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true, activeIcons) : null),
+    [activeSystem, activeScreen?.layout, activeIcons], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const commonSource = useMemo(
     () => (systemLayouts.common && activeScreen ? buildSource(systemLayouts.common, activeScreen.common ?? {}, true, false) : null),
     [systemLayouts.common, activeScreen?.common], // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,6 +129,20 @@ export function App() {
         : null,
     [activeSystem, mainSource, commonSource, activeScreen?.wallpaper, mockState, selectedKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // Player select opens over the Home menu: its transparent parts show Home, blurred.
+  const homeScreen = project?.screens.find((s) => s.target === 'home');
+  const underlay = useMemo(() => {
+    const sys = systemLayouts.home;
+    if (activeScreen?.target !== 'psl' || !sys) return null;
+    const layout = homeScreen?.layout ?? {};
+    const main = buildSource(sys, layout, true, false);
+    const common = systemLayouts.common ? buildSource(systemLayouts.common, homeScreen?.common ?? {}, true, false) : null;
+    const s = buildScene({ system: sys, main, common, hasWallpaper: Boolean(homeScreen?.wallpaper), mock: { ...mockState, selectedGameIndex: 0 }, selectedKey: null });
+    if (!s) return null;
+    const url = homeScreen?.wallpaper?.displayUrl;
+    return { scene: s, background: url ? { url } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light } };
+  }, [activeScreen?.target, systemLayouts.home, systemLayouts.common, homeScreen, mockState]);
 
   const selectNode = useCallback((n: SceneNode | null) => {
     setSelectedKey(n?.key ?? null);
@@ -400,6 +432,7 @@ export function App() {
         {project && <Viewport
           activeScreen={activeScreen}
           scene={scene}
+          underlay={underlay}
           mode={mode}
           mockState={mockState}
           selectedId={activeSelectedId}

@@ -20,9 +20,11 @@ export interface MockSystemState {
   selectedGameIndex: number;
   /** The first game is suspended ("Playing" badge, Resume on the lock screen). Default true. */
   gameSuspended?: boolean;
+  /** A game is suspended while the lock screen shows. Default false (the HOME button shows). */
+  lockGameSuspended?: boolean;
   /**
    * Lock screen in its centred state (LockMainIn: no status bar, news column or Continue button).
-   * Default false: the state with the status bar and news column (LockMainOut).
+   * Derived for the lock screen: centred when nothing is suspended.
    */
   lockCentred?: boolean;
   isDarkTheme: boolean;

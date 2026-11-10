@@ -599,22 +599,11 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 <input
                   type="checkbox"
                   checked={mockState.gameSuspended !== false}
-                  onChange={(e) => onUpdateMockState({ gameSuspended: e.target.checked })}
+                  onChange={(e) => onUpdateMockState(activeScreen.target === 'lock' ? { lockGameSuspended: e.target.checked } : { gameSuspended: e.target.checked })}
                   className="accent-[var(--accent)]"
                 />
                 First game is suspended (Playing)
               </label>
-              {activeScreen.target === 'lock' && (
-                <label className="flex items-center gap-2 text-[12px] text-[var(--text-2)] cursor-pointer" title="The lock screen's other state: content centred, with no status bar, news column or Continue button">
-                  <input
-                    type="checkbox"
-                    checked={mockState.lockCentred === true}
-                    onChange={(e) => onUpdateMockState({ lockCentred: e.target.checked })}
-                    className="accent-[var(--accent)]"
-                  />
-                  Centred lock screen (no status bar)
-                </label>
-              )}
 
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {mockState.games.map((g, idx) => (

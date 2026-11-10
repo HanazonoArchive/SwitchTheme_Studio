@@ -114,9 +114,19 @@ export function App() {
   }, [extraFiles]); // eslint-disable-line react-hooks/exhaustive-deps
   const activeIcons = useMemo(() => (icons && icons.files === extraFiles ? icons.icons : []), [icons, extraFiles]);
 
+  // Lock screen: with nothing suspended it rests centred with the HOME button and no status bar
+  // (EntMain_LockMainIn, as on PS5 by Rodel's console screenshot); with a suspended game the
+  // content moves right and the status bar shows (LockMainOut, as on Lava Lamp's and Project
+  // Clean's). The lock screen starts with nothing suspended; the Console tab switches it.
+  const screenMock = useMemo<MockSystemState>(() => {
+    if (activeScreen?.target !== 'lock') return mockState;
+    const gameSuspended = mockState.lockGameSuspended ?? false;
+    return { ...mockState, gameSuspended, lockCentred: !gameSuspended };
+  }, [mockState, activeScreen?.target]);
+
   const mainSource = useMemo(
-    () => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true, activeIcons, { lockCentred: mockState.lockCentred }) : null),
-    [activeSystem, activeScreen?.layout, activeIcons, mockState.lockCentred], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true, activeIcons, { lockCentred: screenMock.lockCentred }) : null),
+    [activeSystem, activeScreen?.layout, activeIcons, screenMock.lockCentred], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const commonSource = useMemo(
     () => (systemLayouts.common && activeScreen ? buildSource(systemLayouts.common, activeScreen.common ?? {}, true, false) : null),
@@ -125,9 +135,9 @@ export function App() {
   const scene = useMemo(
     () =>
       activeSystem && mainSource && activeScreen
-        ? buildScene({ system: activeSystem, main: mainSource, common: commonSource, hasWallpaper: Boolean(activeScreen.wallpaper), mock: mockState, selectedKey })
+        ? buildScene({ system: activeSystem, main: mainSource, common: commonSource, hasWallpaper: Boolean(activeScreen.wallpaper), mock: screenMock, selectedKey })
         : null,
-    [activeSystem, mainSource, commonSource, activeScreen?.wallpaper, mockState, selectedKey], // eslint-disable-line react-hooks/exhaustive-deps
+    [activeSystem, mainSource, commonSource, activeScreen?.wallpaper, screenMock, selectedKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // Player select opens over the Home menu: its transparent parts show Home, blurred.
@@ -413,7 +423,7 @@ export function App() {
               systemLayouts={systemLayouts}
               consoleLayouts={consoleLayouts}
               systemError={systemError}
-              mockState={mockState}
+              mockState={screenMock}
               selectedKey={selectedKey}
               onSelect={setSelectedKey}
               onUpdateActiveScreen={updateActiveScreen}

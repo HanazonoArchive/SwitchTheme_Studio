@@ -283,8 +283,12 @@ function layoutHud(trees: Map<string, BflytPane | null>, layout: LayoutPatch) {
       let x = chain[0]!.position.X - width;
       for (let i = 1; i < chain.length; i++) {
         const p = chain[i]!;
-        // A theme's own position wins (Purple Skies moves the clock to the top on firmware 23).
-        if (!findPanePatch(layout, 'blyt/Hud.bflyt', p.name)?.Position) p.position = { ...p.position, X: x };
+        // qlaunch lays the row out itself: a theme's X for a pane that stays in the row is
+        // overwritten (Project Clean and the injector's Legacy_Diamond set N_Time to X 10 and the
+        // clock still sits left of the Wi-Fi icon). A pane the theme lifts out of the row keeps
+        // its position (Purple Skies moves the clock into its top bar). Both from console shots.
+        const moved = findPanePatch(layout, 'blyt/Hud.bflyt', p.name)?.Position;
+        if (!moved || (moved.Y ?? 0) === 0) p.position = { ...p.position, X: x };
         x = p.position.X - p.size.X;
       }
     }

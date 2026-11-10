@@ -224,6 +224,11 @@ screen against the console screenshots that ship with them. What they exercised:
   tint colour is the plate's own colour, not recoloured for Basic Black.
 - **Hidden parts stay hidden.** All Software's header title and sort button follow the theme's
   `L_Header` / `L_BtnSort` visibility.
+- **The lock screen has two resting states.** `EntMain_LockMainOut` leaves the status bar, news
+  column and Continue button showing with the content 180 px right of centre (Lava Lamp and Project
+  Clean screenshots); `EntMain_LockMainIn` centres the content and hides the status bar (PS5 by
+  Rodel's screenshot). The Console tab switches between them. With nothing suspended the round
+  button shows `N_SystemApplet` with the HOME icon (or the theme's `lock.png`).
 - **Player select** opens over the blurred Home menu, and the add-user button gets its plus icon.
 - **The User page navigation is stacked by code.** Sections follow each other from `N_Top` down,
   so Lava Lamp's `N_Account` at Y -340 still shows "Profile" at the top, as on its console screenshot.

@@ -66,13 +66,16 @@ export const RUNTIME_HIDDEN: Record<string, string[]> = {
   'blyt/MypNav.bflyt': ['L_NewList', 'L_NewInv', 'L_New'],
   'blyt/SetCntFlightMode.bflyt': ['N_Bluetooth', 'N_Wifi', 'N_Nfc'],
   'blyt/FlcCntMain.bflyt': ['L_Loading', 'T_00', 'T_Empty'],
-  // Suspended-applet button, alarm overlay, parental-controls pill, the 'press the same
-  // button' prompt and news 'new' badges only appear in those states.
-  'blyt/EntMain.bflyt': ['L_BtnSystemApplet', 'N_Alarm', 'L_ChildLock', 'N_Lock', 'N_LockSub', 'L_IconNew_00', 'L_IconNew_01', 'L_IconNew_02', 'L_IconNew_03'],
+  // Alarm overlay, parental-controls pill, the 'press the same button' prompt and news 'new'
+  // badges only appear in those states. (Game vs HOME button: N_Game / N_SystemApplet, set by
+  // the preview from the suspended-game toggle.)
+  'blyt/EntMain.bflyt': ['N_Alarm', 'L_ChildLock', 'N_Lock', 'N_LockSub', 'L_IconNew_00', 'L_IconNew_01', 'L_IconNew_02', 'L_IconNew_03'],
 };
 
 /** Shown by code once runtime content is ready (loaded images, header icons, pages). */
 export const RUNTIME_SHOWN: Record<string, string[]> = {
+  // Nothing suspended: the lock screen's round button shows the HOME icon.
+  'blyt/EntBtnResumeSystemApplet.bflyt': ['P_PictHome'],
   'blyt/TextH1Ex.bflyt': ['P_Icon'],
   'blyt/TextH1.bflyt': ['P_Icon'],
   'blyt/TextH1Ntf.bflyt': ['N_PictNtf'],
@@ -123,11 +126,15 @@ function getAnimation(sys: SystemLayout, layout: LayoutPatch, name: string): Ani
 export interface InstanceState {
   focused?: boolean;
   running?: boolean;
+  /** Lock screen in its centred state (EntMain_LockMainIn). */
+  lockCentred?: boolean;
 }
 
 export function restingAnimations(sys: SystemLayout, layoutFile: string, state: InstanceState = {}): { name: string; at: 'start' | 'end' }[] {
   const base = layoutFile.replace(/^blyt\//, '').replace(/\.bflyt$/, '');
   let steps: Step[] = [...GENERIC, ...(PER_LAYOUT[base] ?? [])];
+  // The lock screen's other resting state: content centred, status bar and news column hidden.
+  if (base === 'EntMain' && state.lockCentred) steps = steps.map((s): Step => (s[0] === 'LockMainOut' ? ['LockMainIn', 'end'] : s));
   if (state.focused) {
     steps = steps.filter(([n]) => !/^(UnFocusKey|UnfocusKey|UnFocusTouch|Inactive)$/.test(n));
     steps.push(['FocusKey', 'end'], ['Active', 'end']);

@@ -115,8 +115,8 @@ export function App() {
   const activeIcons = useMemo(() => (icons && icons.files === extraFiles ? icons.icons : []), [icons, extraFiles]);
 
   const mainSource = useMemo(
-    () => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true, activeIcons) : null),
-    [activeSystem, activeScreen?.layout, activeIcons], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true, activeIcons, { lockCentred: mockState.lockCentred }) : null),
+    [activeSystem, activeScreen?.layout, activeIcons, mockState.lockCentred], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const commonSource = useMemo(
     () => (systemLayouts.common && activeScreen ? buildSource(systemLayouts.common, activeScreen.common ?? {}, true, false) : null),

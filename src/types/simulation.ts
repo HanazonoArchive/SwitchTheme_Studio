@@ -20,6 +20,11 @@ export interface MockSystemState {
   selectedGameIndex: number;
   /** The first game is suspended ("Playing" badge, Resume on the lock screen). Default true. */
   gameSuspended?: boolean;
+  /**
+   * Lock screen in its centred state (LockMainIn: no status bar, news column or Continue button).
+   * Default false: the state with the status bar and news column (LockMainOut).
+   */
+  lockCentred?: boolean;
   isDarkTheme: boolean;
   wireframeMode: boolean;
   canvasZoom: number;

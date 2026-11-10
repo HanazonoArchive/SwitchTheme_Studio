@@ -236,8 +236,12 @@ export const StartPage: React.FC<Props> = ({ onOpen }) => {
               <li>The console's stock layouts are built in. Loading your own .szs files (Layout tab) is optional and adds the exact textures.</li>
               <li>Drop a .nxtheme or .zip anywhere on this page to open it.</li>
               <li>
-                In the editor: wheel to zoom, Space + drag to pan, drag to move, handles to resize, <kbd className="kbd">Alt</kbd> to move without snapping,{' '}
-                <kbd className="kbd">Ctrl</kbd>+<kbd className="kbd">Z</kbd> to undo.
+                In the editor: wheel to zoom, Space + drag to pan, drag to move, handles to resize, the knob to rotate,{' '}
+                <kbd className="kbd">Alt</kbd> to move without snapping, <kbd className="kbd">Ctrl</kbd>+<kbd className="kbd">Z</kbd> to undo.
+              </li>
+              <li>
+                A click selects a whole component (a game icon, an applet button); double-click to go inside it,{' '}
+                <kbd className="kbd">Ctrl</kbd>+click for the exact layer.
               </li>
               <li>Themes need a modded console and NXThemes Installer to install.</li>
             </ul>

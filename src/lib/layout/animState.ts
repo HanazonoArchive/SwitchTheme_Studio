@@ -87,6 +87,8 @@ export const RUNTIME_SHOWN: Record<string, string[]> = {
 export interface MaterialOverride {
   black?: [number?, number?, number?, number?];
   white?: [number?, number?, number?, number?];
+  /** First texture's SRT from FLTS: translate X/Y, rotation, scale X/Y. */
+  srt?: [number?, number?, number?, number?, number?];
 }
 
 const animCache = new WeakMap<Uint8Array, Animation | null>();
@@ -198,6 +200,18 @@ export function applyRestingState(
         }
       } else if (entry.target === 1) {
         for (const tag of entry.tags) {
+          if (tag.type === 'FLTS') {
+            // Texture SRT (the lock screen's left panel slides its checker texture between the
+            // dark and light texel to show or hide the news column).
+            const o = materials.get(entry.name) ?? {};
+            const srt = [...(o.srt ?? [])] as NonNullable<MaterialOverride['srt']>;
+            for (const c of tag.curves) {
+              const v = curveValue(c, step.at);
+              if (v !== undefined && c.target < 5) srt[c.target] = v;
+            }
+            materials.set(entry.name, { ...o, srt });
+            continue;
+          }
           if (tag.type !== 'FLMC') continue;
           const o = materials.get(entry.name) ?? {};
           for (const c of tag.curves) {

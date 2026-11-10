@@ -201,7 +201,12 @@ function withOverride(mat: BflytMaterial, o: MaterialOverride | undefined): Bfly
     const c = parseLayoutColor(hex).map((v, i) => Math.round(ch[i] ?? v));
     return ((c[0] | (c[1] << 8) | (c[2] << 16) | (c[3] << 24)) >>> 0).toString(16).toUpperCase().padStart(8, '0');
   };
-  return { ...mat, black: apply(mat.black, o.black), white: apply(mat.white, o.white) };
+  const t0 = mat.transforms[0];
+  const transforms =
+    o.srt && t0
+      ? [{ ...t0, x: o.srt[0] ?? t0.x, y: o.srt[1] ?? t0.y, rotation: o.srt[2] ?? t0.rotation, scaleX: o.srt[3] ?? t0.scaleX, scaleY: o.srt[4] ?? t0.scaleY }, ...mat.transforms.slice(1)]
+      : mat.transforms;
+  return { ...mat, black: apply(mat.black, o.black), white: apply(mat.white, o.white), transforms };
 }
 
 const anchor = (o: number, size: number) => (o === 1 ? -size / 2 : o === 2 ? size / 2 : 0);

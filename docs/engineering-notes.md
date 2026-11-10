@@ -230,6 +230,13 @@ screen against the console screenshots that ship with them. What they exercised:
   suspended, `EntMain_LockMainIn`: content centred, no status bar, and `N_SystemApplet` with the HOME
   icon or the theme's `lock.png` (PS5 by Rodel's screenshot). The lock screen preview starts with
   nothing suspended; the Console tab switches it.
+- **Texture scroll (FLTS) is applied at rest.** The lock screen's left panel is one checker texel
+  scrolled to dark (news column shown) or to the background colour (`LockMainIn`), so it only
+  disappears once the texture SRT track is applied. The HOME button's stand-in icon is drawn as the
+  left half of a house because the console mirrors that texture.
+- **Editor components.** prt1 parts and the slots qlaunch fills in code are components: a click
+  selects the whole thing, resizing it changes its Scale so everything inside follows, and the
+  rotation knob edits Rotation Z. Equal-spacing snapping measures gaps between siblings.
 - **Player select** opens over the blurred Home menu, and the add-user button gets its plus icon.
 - **The User page navigation is stacked by code.** Sections follow each other from `N_Top` down,
   so Lava Lamp's `N_Account` at Y -340 still shows "Profile" at the top, as on its console screenshot.

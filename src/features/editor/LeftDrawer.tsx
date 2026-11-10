@@ -595,6 +595,16 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 </button>
               </div>
 
+              <label className="flex items-center gap-2 text-[12px] text-[var(--text-2)] cursor-pointer" title="The first game shows as Playing; the lock screen offers to resume it instead of the HOME button">
+                <input
+                  type="checkbox"
+                  checked={mockState.gameSuspended !== false}
+                  onChange={(e) => onUpdateMockState({ gameSuspended: e.target.checked })}
+                  className="accent-[var(--accent)]"
+                />
+                First game is suspended (Playing)
+              </label>
+
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {mockState.games.map((g, idx) => (
                   <div

@@ -55,9 +55,11 @@ browser.
   handles, nudge with the arrow keys, and undo everything. A full layer hierarchy with editor-only
   hide and lock.
 - **Installer-exact patching.** Every `layout.json` feature SwitchThemesCommon applies is applied
-  here too, including installer compatibility fixes for the target firmware.
+  here too, including custom icons and installer compatibility fixes for the target firmware.
+  Tested with community packs as well as the examples.
 - **Live preview mode.** Use the screen like the console: move focus between games, switch Basic
-  White / Basic Black, change users, games and the clock.
+  White / Basic Black, change users, games and the clock, and choose whether a game is suspended.
+  Player select opens over the blurred Home menu, as on the console.
 - **Projects saved locally.** Themes autosave to IndexedDB and appear under Recent on the start page.
 - **One-click export** of a screen (`.nxtheme`) or the whole theme (`.zip`), ready for NXThemes Installer.
 
@@ -192,6 +194,7 @@ The preview applies everything the installer (SwitchThemesCommon) applies, in th
 | `PullFrontPanes` / `PushBackPanes` | Draw order within the parent |
 | `PatchAppletColorAttrib` | Home applet icons read from their alpha channel |
 | `Anims` | The theme's animations, shown at their resting state |
+| Custom icons | `album.png` … `share.png` on Home and `lock.png` on the lock screen, with the installer's icon patches |
 | Compatibility fixes | The installer's per-firmware fixes, chosen from `TargetFirmware` |
 
 ## Project structure

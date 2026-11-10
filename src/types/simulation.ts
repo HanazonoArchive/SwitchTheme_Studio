@@ -18,6 +18,8 @@ export interface MockSystemState {
   users: MockUser[];
   games: MockGame[];
   selectedGameIndex: number;
+  /** The first game is suspended ("Playing" badge, Resume on the lock screen). Default true. */
+  gameSuspended?: boolean;
   isDarkTheme: boolean;
   wireframeMode: boolean;
   canvasZoom: number;

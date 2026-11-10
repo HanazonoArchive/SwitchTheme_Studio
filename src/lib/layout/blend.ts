@@ -49,11 +49,13 @@ export function analyseMasks(root: BflytPane, materials: BflytMaterial[]): MaskI
   const walk = (p: BflytPane, parent: BflytPane | null) => {
     const mat = p.materialIndex !== undefined ? materials[p.materialIndex] : undefined;
     if (mat && (p.kind === 'pic1' || p.kind === 'txt1' || p.kind === 'wnd1')) {
-      if (isAlphaOnly(mat)) info.alphaOnly.add(p.name);
+      // Scroll fades (W_Fade) only shape the alpha of what scrolls under them.
+      if (isAlphaOnly(mat) || (p.kind === 'wnd1' && /Fade/.test(p.name))) info.alphaOnly.add(p.name);
       const ab = mat.blendAlpha;
       if (ab && ab.op === 1) {
         if (ab.src === 0 && ab.dst === 0) writers = [];
-        else if (ab.dst === 0) writers = [{ pane: p, parent }];
+        // Overwriting alpha where glyphs are: consecutive text runs add up (title + subtitle).
+        else if (ab.dst === 0) writers = p.kind === 'txt1' ? [...writers.filter((w) => w.pane.kind === 'txt1'), { pane: p, parent }] : [{ pane: p, parent }];
         else if (p.kind !== 'wnd1') writers.push({ pane: p, parent }); // multiply/add: intersect (edge fades skipped)
       }
       if (usesDstAlpha(mat) && writers.length) {

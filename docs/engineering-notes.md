@@ -203,6 +203,40 @@ Checked side by side against real console captures (stock Basic White and Purple
   the area between the header and footer lines and scrolls to keep the focused row visible. With no
   group filter, only the sort order shows at the right edge.
 
+## Round 6: third-party theme packs
+
+Three community packs (Vertical Blue Lava Lamp, Project Clean, PS5 Theme) were checked screen by
+screen against the console screenshots that ship with them. What they exercised:
+
+- **Custom icons.** `album.png`, `news.png`, `shop.png`, `controller.png`, `settings.png`,
+  `power.png`, `nso.png`, `card.png`, `share.png` and `lock.png` are applied like
+  SwitchThemesCommon's `TextureReplacement`: the icon's own layout patch (size, hidden decorations,
+  `C_W` 100) goes before the theme's layout, the pane's UVs are reset, and applet icons are drawn as
+  a silhouette (alpha channel) in palette colour 100. The lock icon keeps its colours.
+- **Parts ignore their RootPane.** A prt1 pane replaces the part's RootPane, so a theme hiding or
+  moving `RootPane` inside `HudTime.bflyt` changes nothing (Project Clean's clock and Wi-Fi).
+- **Palette 0 means "none".** `C_W` 0 keeps the material colour instead of resolving to transparent
+  black (Lava's Settings navigation text).
+- **Code-owned alpha.** qlaunch sets `N_Root` alpha on game icons itself, so a theme `Inactive`
+  animation that fades it to 2 doesn't hide unfocused icons (PS5).
+- **Title balloons.** The focused game's balloon is measured to its title and centred on the icon
+  by code; title and subtitle together mask the colour plate; `W_Fade` windows are alpha-only. The
+  tint colour is the plate's own colour, not recoloured for Basic Black.
+- **Hidden parts stay hidden.** All Software's header title and sort button follow the theme's
+  `L_Header` / `L_BtnSort` visibility.
+- **Player select** opens over the blurred Home menu, and the add-user button gets its plus icon.
+- **The User page navigation is stacked by code.** Sections follow each other from `N_Top` down,
+  so Lava Lamp's `N_Account` at Y -340 still shows "Profile" at the top, as on its console screenshot.
+- **HUD positions a theme sets are kept.** Project Clean moves `N_Time` with only an X value, so the
+  installer sets Y to 0 and the clock lands on the battery. Its screenshot comes from older firmware;
+  Purple Skies (checked on 23.0.1) shows the console honours `N_Time` positions, so the preview
+  does too, and the Inspector flags the partial vector.
+- **Console toggle** for whether the first game is suspended, which switches the lock screen between
+  the Resume card and the HOME-button icon.
+
+Remaining differences mostly come from the packs' screenshots being taken on older firmware (User
+page and News structure, an extra Settings entry).
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

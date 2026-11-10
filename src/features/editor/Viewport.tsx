@@ -5,12 +5,14 @@ import type { Scene, SceneNode } from '../../lib/render/scene';
 import type { MockSystemState } from '../../types/simulation';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { STOCK_BG } from '../../lib/theme/stock';
-import { PixiView } from '../canvas/PixiView';
+import { PixiView, type Underlay } from '../canvas/PixiView';
 import { EditorOverlay, type SnapSettings } from '../canvas/EditorOverlay';
 
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
   scene: Scene | null;
+  /** Drawn blurred behind the screen (Home behind Player select). */
+  underlay?: Underlay | null;
   mode: 'edit' | 'preview';
   mockState: MockSystemState;
   selectedId: string | null;
@@ -29,6 +31,7 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 
 export const Viewport: React.FC<ViewportProps> = ({
+  underlay,
   activeScreen,
   scene,
   mode,
@@ -182,7 +185,7 @@ export const Viewport: React.FC<ViewportProps> = ({
           }}
         >
           <div className="absolute left-0 top-0 overflow-hidden" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
-            <PixiView scene={scene} background={background} resolution={Math.min(4, dpr * scale)} hiddenIds={hiddenIds} />
+            <PixiView scene={scene} underlay={underlay} background={background} resolution={Math.min(4, dpr * scale)} hiddenIds={hiddenIds} />
           </div>
           {scene && (
             <div className="absolute left-0 top-0" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0', pointerEvents: space ? 'none' : undefined }}>

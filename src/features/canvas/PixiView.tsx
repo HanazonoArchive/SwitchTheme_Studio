@@ -9,8 +9,15 @@ import type { PaneVisual } from '../../lib/layout/textures';
  * only draws, and only when something changed.
  */
 
+export interface Underlay {
+  scene: Scene;
+  background: { url: string } | { color: string };
+}
+
 interface Props {
   scene: Scene | null;
+  /** Another screen drawn blurred underneath (Player select opens over the Home menu). */
+  underlay?: Underlay | null;
   /** Wallpaper image (data/blob URL) or a solid background colour. */
   background: { url: string } | { color: string };
   /** Device pixels per layout pixel: devicePixelRatio × zoom, for sharp text and edges. */
@@ -137,10 +144,16 @@ function contentDisplay(content: Content, node: SceneNode, res: number, onImage:
     const tex = images.get(content.url);
     if (tex instanceof Texture) {
       const s = new Sprite(tex);
-      const k = Math.max(content.w / tex.width, content.h / tex.height);
-      s.width = tex.width * k;
-      s.height = tex.height * k;
-      s.position.set((content.w - s.width) / 2, (content.h - s.height) / 2);
+      if (content.fit === 'fill') {
+        s.width = content.w;
+        s.height = content.h;
+      } else {
+        const k = Math.max(content.w / tex.width, content.h / tex.height);
+        s.width = tex.width * k;
+        s.height = tex.height * k;
+        s.position.set((content.w - s.width) / 2, (content.h - s.height) / 2);
+      }
+      if (content.tint) s.tint = content.tint;
       const m = new Graphics();
       if (content.radius) m.roundRect(0, 0, content.w, content.h, content.radius);
       else m.rect(0, 0, content.w, content.h);
@@ -218,7 +231,7 @@ function buildDisplay(node: SceneNode, hiddenIds: ReadonlySet<string>, res: numb
   return c;
 }
 
-export const PixiView: React.FC<Props> = ({ scene, background, resolution, hiddenIds }) => {
+export const PixiView: React.FC<Props> = ({ scene, underlay, background, resolution, hiddenIds }) => {
   const host = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const [ready, setReady] = useState(false);
@@ -262,30 +275,42 @@ export const PixiView: React.FC<Props> = ({ scene, background, resolution, hidde
     const old = app.stage.removeChildren();
     old.forEach((o) => o.destroy({ children: true }));
 
+    const tick = () => setImageTick((n) => n + 1);
     // Background: the theme image, or the console's own colour.
-    if ('url' in background) {
-      const bg = images.get(background.url);
-      if (bg instanceof Texture) {
-        const s = new Sprite(bg);
-        s.width = width;
-        s.height = height;
-        app.stage.addChild(s);
-      } else if (!bg) {
-        images.set(background.url, 'loading');
-        Assets.load<Texture>({ src: background.url, parser: 'loadTextures' })
-          .then((t) => {
-            images.set(background.url, t);
-            setImageTick((n) => n + 1);
-          })
-          .catch(() => images.set(background.url, 'error'));
+    const backdrop = (b: Underlay['background'], into: Container) => {
+      if ('url' in b) {
+        const bg = images.get(b.url);
+        if (bg instanceof Texture) {
+          const s = new Sprite(bg);
+          s.width = width;
+          s.height = height;
+          into.addChild(s);
+        } else if (!bg) {
+          images.set(b.url, 'loading');
+          Assets.load<Texture>({ src: b.url, parser: 'loadTextures' })
+            .then((t) => {
+              images.set(b.url, t);
+              tick();
+            })
+            .catch(() => images.set(b.url, 'error'));
+        }
+      } else {
+        const { color, alpha } = css(b.color);
+        into.addChild(new Graphics().rect(0, 0, width, height).fill({ color, alpha }));
       }
-    } else {
-      const { color, alpha } = css(background.color);
-      app.stage.addChild(new Graphics().rect(0, 0, width, height).fill({ color, alpha }));
-    }
-    if (scene) app.stage.addChild(buildDisplay(scene.root, hiddenIds, res, () => setImageTick((n) => n + 1)));
+    };
+    if (underlay) {
+      const under = new Container();
+      backdrop(underlay.background, under);
+      under.addChild(buildDisplay(underlay.scene.root, new Set(), res, tick));
+      under.filters = [new BlurFilter({ strength: 14, quality: 4 })];
+      app.stage.addChild(under, new Graphics().rect(0, 0, width, height).fill({ color: 0, alpha: 0.15 }));
+      // Only a theme image covers it; the console colour would hide what qlaunch shows through.
+      if ('url' in background) backdrop(background, app.stage);
+    } else backdrop(background, app.stage);
+    if (scene) app.stage.addChild(buildDisplay(scene.root, hiddenIds, res, tick));
     app.render();
-  }, [ready, scene, background, resolution, hiddenIds, imageTick, width, height]);
+  }, [ready, scene, underlay, background, resolution, hiddenIds, imageTick, width, height]);
 
   return <div ref={host} className="absolute inset-0 [&>canvas]:block [&>canvas]:w-full [&>canvas]:h-full" />;
 };

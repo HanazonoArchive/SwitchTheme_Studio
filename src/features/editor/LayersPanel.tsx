@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Eye, EyeOff, Lock, LockOpen, Search, Square, Type, Box, Component, Frame } from 'lucide-react';
-import type { Scene, SceneNode } from '../../lib/render/scene';
+import { isComponent, type Scene, type SceneNode } from '../../lib/render/scene';
 
 /**
  * The screen's layer hierarchy, top of the stack first like Figma. Parts and the layouts
@@ -89,7 +89,8 @@ export const LayersPanel: React.FC<Props> = ({ scene, selectedId, hiddenIds, loc
   const row = (n: SceneNode, depth: number, flatList = false): React.ReactNode => {
     const kids = flatList ? [] : visibleChildren(n);
     const isOpen = isOpenId(n.id);
-    const Icon = KIND_ICON[n.kind] ?? Box;
+    const comp = isComponent(n);
+    const Icon = comp ? Component : (KIND_ICON[n.kind] ?? Box);
     const sel = n.id === selectedId;
     const eyeOff = hiddenIds.has(n.id);
     const locked = lockedIds.has(n.id);
@@ -112,7 +113,7 @@ export const LayersPanel: React.FC<Props> = ({ scene, selectedId, hiddenIds, loc
           >
             <ChevronRight className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
           </button>
-          <Icon className="w-3.5 h-3.5 mx-1 shrink-0 opacity-70" />
+          <Icon className={`w-3.5 h-3.5 mx-1 shrink-0 ${comp ? 'text-violet-400' : 'opacity-70'}`} />
           <span className={`truncate flex-1 ${eyeOff ? 'opacity-50' : ''}`}>{n.name === 'RootPane' ? n.file.replace('blyt/', '').replace('.bflyt', '') : n.name}</span>
           {flatList && <span className="text-[10px] text-[var(--text-3)] truncate max-w-[90px] mr-1">{n.file.replace('blyt/', '').replace('.bflyt', '')}</span>}
           <button

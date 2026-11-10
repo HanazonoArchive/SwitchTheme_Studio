@@ -1,11 +1,15 @@
 import React, { useMemo, useRef, useState } from 'react';
-import type { Scene, SceneNode } from '../../lib/render/scene';
+import { isComponent, type Scene, type SceneNode } from '../../lib/render/scene';
 import { apply, applyLinear, bounds, invert, quad } from '../../lib/render/matrix';
 
 /**
  * Selection, hover, handles, drag-to-move with snapping and smart guides, and resize — drawn
  * as SVG over the Pixi canvas in the same 1280×720 space. Hit testing uses the scene's world
  * matrices, so what you click is exactly what is drawn there.
+ *
+ * Parts (prt1: a game icon, an applet button, a settings row) are components, as in Figma:
+ * clicking selects the whole component, so moving it moves everything in it. Double-click goes
+ * one level deeper; once inside, clicks pick at that level. Ctrl/Cmd+click picks the exact layer.
  */
 
 export interface SnapSettings {
@@ -69,6 +73,8 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
   const drag = useRef<Drag | null>(null);
+  // Double-click detection on pointerdown (PointerEvent.detail isn't a reliable click count).
+  const lastDown = useRef<{ t: number; x: number; y: number } | null>(null);
 
   const byId = useMemo(() => new Map(scene.flat.map((n) => [n.id, n])), [scene]);
   /** Things you can click: editable, drawn, not hidden or locked in the editor. */
@@ -77,6 +83,59 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
     [scene, showAllOutlines, hiddenIds, lockedIds],
   );
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
+  const parentOf = useMemo(() => {
+    const m = new Map<string, SceneNode>();
+    const walk = (n: SceneNode) => n.children.forEach((c) => (m.set(c.id, n), walk(c)));
+    walk(scene.root);
+    return m;
+  }, [scene]);
+
+  /**
+   * What the outline shows: a pane's own rect, or for a component the box around what it draws
+   * (a slot's rect says nothing about the icon qlaunch puts in it).
+   */
+  const outline = (n: SceneNode): [number, number][] => {
+    if (!isComponent(n)) return quad(n.world, n.rect);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const walk = (c: SceneNode) => {
+      if (c.hidden) return;
+      if (c.content && c.opacity > 0.02) {
+        const b = bounds(quad(c.world, c.rect));
+        if (b.w < scene.width * 1.5 && b.h < scene.height * 1.5) {
+          x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+        }
+      }
+      c.children.forEach(walk);
+    };
+    walk(n);
+    if (x0 === Infinity) return quad(n.world, n.rect);
+    return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  };
+
+  /** Selectable levels for a clicked layer: its enclosing components, outermost first, then itself. */
+  const levels = (leaf: SceneNode): SceneNode[] => {
+    const out: SceneNode[] = [leaf];
+    for (let p = parentOf.get(leaf.id); p; p = parentOf.get(p.id))
+      if (isComponent(p) && p.key && p.editable && !p.hidden && !blockedBy(p.id, lockedIds)) out.unshift(p);
+    return out;
+  };
+
+  /** What a click on `leaf` selects, given the current selection (see the comment at the top). */
+  const resolve = (leaf: SceneNode | null, how: 'click' | 'deep' | 'into'): SceneNode | null => {
+    if (!leaf) return null;
+    const lv = levels(leaf);
+    if (how === 'deep') return leaf;
+    const at = selected ? lv.findIndex((n) => n.id === selected.id) : -1;
+    if (how === 'into') return at >= 0 ? lv[Math.min(at + 1, lv.length - 1)] : lv[0];
+    if (at >= 0) return selected;
+    // Inside a component already: stay at the selection's depth when the click shares its parents.
+    if (selected) {
+      const sl = levels(selected);
+      const depth = sl.length - 1;
+      if (depth > 0 && depth < lv.length && sl.slice(0, depth).every((n, i) => lv[i].id === n.id)) return lv[depth];
+    }
+    return lv[0];
+  };
 
   const toLayout = (e: React.PointerEvent): [number, number] => {
     const r = ref.current!.getBoundingClientRect();
@@ -128,7 +187,7 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
   };
 
   const startMove = (node: SceneNode, x: number, y: number) => {
-    const box = bounds(quad(node.world, node.rect));
+    const box = bounds(outline(node));
     const { xs, ys } = snapLines(node);
     drag.current = { kind: 'move', node, x0: x, y0: y, box, xs, ys };
     onDrag(node.key, 0, 0, 'start');
@@ -145,7 +204,14 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
     e.stopPropagation();
     ref.current!.setPointerCapture(e.pointerId);
     // Keep dragging the current selection when clicking inside it (even if something is on top).
-    const n = selected && !blockedBy(selected.id, lockedIds) && inside(selected, x, y) && !e.altKey ? selected : hit(x, y);
+    const deep = e.ctrlKey || e.metaKey;
+    const prev = lastDown.current;
+    const twice = !!prev && e.timeStamp - prev.t < 400 && Math.hypot(x - prev.x, y - prev.y) * scale < 5;
+    lastDown.current = twice ? null : { t: e.timeStamp, x, y };
+    const n =
+      selected && !blockedBy(selected.id, lockedIds) && inside(selected, x, y) && !e.altKey && !deep && !twice
+        ? selected
+        : resolve(hit(x, y), deep ? 'deep' : twice ? 'into' : 'click');
     onSelect(n);
     if (n) drag.current = { kind: 'pending', node: n, x0: x, y0: y };
   };
@@ -162,7 +228,7 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
     const [x, y] = toLayout(e);
     const d = drag.current;
     if (!d) {
-      if (mode === 'edit') setHoverId(hit(x, y)?.id ?? null);
+      if (mode === 'edit') setHoverId(resolve(hit(x, y), e.ctrlKey || e.metaKey ? 'deep' : 'click')?.id ?? null);
       return;
     }
     if (d.kind === 'pending') {
@@ -247,11 +313,13 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
 
   const sw = 1 / scale;
   const poly = (n: SceneNode) =>
-    quad(n.world, n.rect)
+    outline(n)
       .map((p) => p.join(','))
       .join(' ');
   const hover = hoverId && hoverId !== selectedId ? byId.get(hoverId) : null;
-  const selQuad = selected ? quad(selected.world, selected.rect) : null;
+  const selQuad = selected ? outline(selected) : null;
+  // A code-filled slot's size doesn't change what's in it, so it gets no resize handles.
+  const resizable = !!selected && (selected.kind === 'prt1' || !isComponent(selected));
   const handlePoints = selQuad
     ? HANDLES.map(([hx, hy]) => {
         const r = selected!.rect;
@@ -300,7 +368,7 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
           ))}
         </svg>
       )}
-      {mode === 'edit' && selected && !selected.hidden && !blockedBy(selected.id, lockedIds) &&
+      {mode === 'edit' && selected && resizable && !selected.hidden && !blockedBy(selected.id, lockedIds) &&
         handlePoints.map(({ h, p }) => (
           <div
             key={h.join()}

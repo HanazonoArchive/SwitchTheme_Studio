@@ -120,7 +120,8 @@ The start page offers:
 
 | Action | How |
 |---|---|
-| Select a layer | Click it on the canvas or in **Layers** |
+| Select a layer | Click it on the canvas or in **Layers**. Components (a game icon, an applet button, a settings row) are selected whole, so moving one moves everything in it |
+| Go into a component | Double-click it; clicks then pick at that level. <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+click picks the exact layer |
 | Select parent / first child | <kbd>Shift</kbd>+<kbd>Enter</kbd> / <kbd>Enter</kbd> |
 | Pick the top layer under the cursor | <kbd>Alt</kbd>+click |
 | Move | Drag (snaps to other layers and the screen). <kbd>Alt</kbd> moves freely, <kbd>Shift</kbd> locks an axis |

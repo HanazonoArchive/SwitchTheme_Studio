@@ -6,7 +6,7 @@ import type { MockSystemState } from '../../types/simulation';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { STOCK_BG } from '../../lib/theme/stock';
 import { PixiView, type Underlay } from '../canvas/PixiView';
-import { EditorOverlay, type SnapSettings } from '../canvas/EditorOverlay';
+import { EditorOverlay, type SnapSettings, type TransformChange } from '../canvas/EditorOverlay';
 
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
@@ -22,7 +22,7 @@ interface ViewportProps {
   onSnapChange: (s: SnapSettings) => void;
   onSelect: (node: SceneNode | null) => void;
   onDragPane: (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => void;
-  onResizePane: (key: string, change: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => void;
+  onResizePane: (key: string, change: TransformChange, phase: 'start' | 'move' | 'end') => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
   onDropFile: (file: File) => void;
 }

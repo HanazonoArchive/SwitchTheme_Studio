@@ -227,10 +227,11 @@ screen against the console screenshots that ship with them. What they exercised:
 - **Player select** opens over the blurred Home menu, and the add-user button gets its plus icon.
 - **The User page navigation is stacked by code.** Sections follow each other from `N_Top` down,
   so Lava Lamp's `N_Account` at Y -340 still shows "Profile" at the top, as on its console screenshot.
-- **HUD positions a theme sets are kept.** Project Clean moves `N_Time` with only an X value, so the
-  installer sets Y to 0 and the clock lands on the battery. Its screenshot comes from older firmware;
-  Purple Skies (checked on 23.0.1) shows the console honours `N_Time` positions, so the preview
-  does too, and the Inspector flags the partial vector.
+- **qlaunch lays out the status row.** A theme's X for the clock, Wi-Fi and battery is replaced by
+  the row layout, unless the theme lifts the pane out of the row with a Y offset. Project Clean
+  (and the injector's Legacy_Diamond) set `N_Time` to X 10 and the console still shows the clock
+  left of the Wi-Fi icon; Purple Skies moves the clock 640 px up into its top bar and it stays where
+  the theme put it.
 - **Console toggle** for whether the first game is suspended, which switches the lock screen between
   the Resume card and the HOME-button icon.
 

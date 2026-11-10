@@ -80,6 +80,15 @@ export interface SceneNode {
   gameIndex: number | null;
 }
 
+/**
+ * A component instance: a part (prt1), or a slot qlaunch fills with a layout in code (a game
+ * icon's N_Icon_00 holds an RdtBtnIconGame, a settings row holds its page). Its own children
+ * come from another layout file.
+ */
+export const isComponent = (n: SceneNode) =>
+  n.kind === 'prt1' || (n.kind !== 'group' && n.children.some((c) => (c.kind === 'group' ? c.children : [c]).some((g) => g.name === 'RootPane' && g.file !== n.file)));
+
+
 export interface Scene {
   width: number;
   height: number;

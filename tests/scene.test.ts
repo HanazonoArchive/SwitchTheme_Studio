@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BflytFile, BflytPane } from '../src/lib/nx/bflyt';
 import type { SystemLayout } from '../src/lib/layout/systemLayouts';
-import { buildScene, buildSource } from '../src/lib/render/scene';
+import { buildScene, buildSource, isComponent } from '../src/lib/render/scene';
 import { applyLayoutToBflyt, applyMaterialPatches, applyUsdPatches } from '../src/lib/layout/patch';
 import { bounds, quad } from '../src/lib/render/matrix';
 import { classifyTexture, systemLayoutFromStock, toStockArchive } from '../src/lib/stock/stockPack';
@@ -144,5 +144,14 @@ describe('built-in layout pack', () => {
     const back = systemLayoutFromStock(json);
     expect(back.layouts.get('blyt/EntMain.bflyt')?.byName.has('N_A')).toBe(true);
     expect(back.source).toBe('stock');
+  });
+});
+
+describe('components', () => {
+  const node = (name: string, kind: string, file: string, children: unknown[] = []) => ({ name, kind, file, children }) as never;
+  it('treats parts and code-filled slots as components, not plain panes', () => {
+    expect(isComponent(node('L_BtnPvr', 'prt1', 'blyt/RdtBase.bflyt'))).toBe(true);
+    expect(isComponent(node('N_Icon_00', 'pan1', 'blyt/RdtBase.bflyt', [node('RootPane', 'pan1', 'blyt/RdtBtnIconGame.bflyt')]))).toBe(true);
+    expect(isComponent(node('N_Root', 'pan1', 'blyt/RdtBase.bflyt', [node('P_Bg', 'pic1', 'blyt/RdtBase.bflyt')]))).toBe(false);
   });
 });

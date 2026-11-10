@@ -315,9 +315,16 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
           <div className="space-y-4">
             {/* Stock layout source */}
             <div className={`${card} space-y-2`}>
-              <div className="flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-[var(--accent)]" />
-                <span className="font-semibold text-[var(--text)] text-[12px]">Console layout ({info.szs})</span>
+              <div className="flex items-start gap-2">
+                <Cpu className="w-4 h-4 text-[var(--accent)] shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-[var(--text)] text-[12px] leading-tight">
+                    Console layout
+                  </div>
+                  <div className="text-[11px] text-[var(--text-3)] font-mono leading-tight mt-0.5">
+                    {info.szs}
+                  </div>
+                </div>
               </div>
               {consoleLayouts[activeScreen.target] ? (
                 <>
@@ -340,10 +347,20 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                     {system ? <>Built-in stock layout (firmware {system.consoleVersion ?? system.firmwareHint}). Positions and sizes are the console's; icons are stand-ins.</> : <>Loading the built-in layout…</>}
                   </p>
                   <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
-                    For the console's own icons and textures, load your files: NXThemes Installer → Extract home menu, then <span className="font-mono">sd:/themes/systemData/extracted/…/lyt/*.szs</span>. They stay in this browser.
+                    For the console's own icons and textures, load your files: NXThemes Installer → Extract home menu, then:
                   </p>
-                  <button onClick={() => szsInputRef.current?.click()} className="ui-btn w-full justify-center">
-                    Load {info.szs} (optional)
+                  <div className="font-mono text-[11px] text-[var(--text-2)] bg-[var(--panel)] px-2 py-1.5 rounded border border-[var(--border)] break-all select-all leading-normal my-1">
+                    sd:/themes/systemData/extracted/…/lyt/{info.szs}
+                  </div>
+                  <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
+                    They stay in this browser.
+                  </p>
+                  <button
+                    onClick={() => szsInputRef.current?.click()}
+                    className="ui-btn w-full justify-center py-1.5 text-center leading-tight flex-wrap"
+                  >
+                    <span>Load {info.szs}</span>
+                    <span className="text-[11px] opacity-70 font-normal">(optional)</span>
                   </button>
                 </>
               )}
@@ -360,8 +377,9 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
               <div className={`${card} space-y-2`}>
                 {(installer.before.length > 0 || installer.after.length > 0) && (
                   <>
-                    <span className="font-semibold text-[var(--text)] text-[12px] flex items-center gap-1.5">
-                      <Wrench className="w-3.5 h-3.5 text-sky-400" /> Installer fixes on firmware {system.firmwareHint}
+                    <span className="font-semibold text-[var(--text)] text-[12px] flex items-start gap-1.5">
+                      <Wrench className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                      <span>Installer fixes on firmware {system.firmwareHint}</span>
                     </span>
                     {[...installer.before, ...installer.after].map((f) => (
                       <div key={f.name} className="text-[12px] text-[var(--text-2)] leading-snug">
@@ -382,9 +400,9 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 )}
                 {compat.length > 0 && (
                   <div className="space-y-1 pt-1">
-                    <span className="font-semibold text-[var(--text)] text-[12px] flex items-center gap-1.5">
-                      <AlertTriangle className={`w-3.5 h-3.5 ${compat.some((c) => c.severity === 'critical') ? 'text-red-400' : 'text-amber-400'}`} />
-                      Compatibility ({compat.length})
+                    <span className="font-semibold text-[var(--text)] text-[12px] flex items-start gap-1.5">
+                      <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${compat.some((c) => c.severity === 'critical') ? 'text-red-400' : 'text-amber-400'}`} />
+                      <span>Compatibility ({compat.length})</span>
                     </span>
                     {!compat.some((c) => c.severity === 'critical') && (
                       <div className="text-[12px] leading-snug text-[var(--text-3)]">

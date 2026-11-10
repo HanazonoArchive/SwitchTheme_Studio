@@ -17,7 +17,7 @@ import { readThemeFiles } from './lib/theme/nxtheme';
 import { ExportModal } from './features/project/ExportModal';
 
 import { useHistory } from './lib/state/useHistory';
-import { editPane, hasLayoutChanges, revertPane, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
+import { editPane, hasLayoutChanges, revertPane, type LayoutPatch, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
 import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
 import { loadAppletIcons, type AppletIcon } from './lib/layout/appletIcons';
@@ -222,6 +222,18 @@ export function App() {
         const base = !hasLayoutChanges(s.layout) && s.layout.TargetFirmware === undefined && sys && sys.firmware >= FW.Fw11_0 ? stampFirmware(s.layout, s.target, sys.firmware) : s.layout;
         const info = getPaneInfo(base, sys, key);
         return { layout: editPane(base, info.file, info.name, info.current, edit) };
+      }, opts);
+    },
+    [updateActiveScreen, systemLayouts],
+  );
+
+  // Style edits (colours, user data, materials, draw order) work on the whole layout.json.
+  const handleEditLayout = useCallback(
+    (fn: (layout: LayoutPatch) => LayoutPatch, opts?: { transient?: boolean }) => {
+      updateActiveScreen((s) => {
+        const sys = systemLayouts[s.target];
+        const base = !hasLayoutChanges(s.layout) && s.layout.TargetFirmware === undefined && sys && sys.firmware >= FW.Fw11_0 ? stampFirmware(s.layout, s.target, sys.firmware) : s.layout;
+        return { layout: fn(base) };
       }, opts);
     },
     [updateActiveScreen, systemLayouts],
@@ -505,7 +517,7 @@ export function App() {
               />
             </div>
             <div className="flex-[2] min-h-[200px] overflow-y-auto">
-              <Inspector activeScreen={activeScreen} system={activeSystem} selectedKey={selectedKey} onEditPane={handleEditPane} onRevertPane={handleRevertPane} />
+              <Inspector activeScreen={activeScreen} system={activeSystem} selectedKey={selectedKey} onEditPane={handleEditPane} onRevertPane={handleRevertPane} onEditLayout={handleEditLayout} onCommit={history.commit} dark={screenMock.isDarkTheme} />
             </div>
           </aside>
         )}

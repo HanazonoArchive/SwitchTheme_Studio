@@ -45,30 +45,39 @@ browser.
 
 ## Highlights
 
-- **Console-accurate preview.** Renders the actual pane trees of firmware 20.0+ (verified on 23.0.1):
+- **Console-accurate preview.** Renders the actual pane trees of firmware 20.0+ (built from 23.0.1):
   anchors, parts, materials, blend masks, user-data borders and rounded corners, idle animation
-  states and the layouts qlaunch builds at runtime (game rows, the "Playing" badge, the status bar,
-  Settings pages).
+  states and what qlaunch lays out in code (game rows, the "Playing" balloon and title bubble, the
+  status bar, the All Software list, the User page menu, the lock screen's two states).
 - **No dump needed.** The stock layouts ship as structure and numbers only, with our own stand-in
-  icons. Loading your console's `.szs` files is optional and adds the exact textures.
-- **Figma-style editor.** Click what you see, drag with smart guides and a snap grid, resize with
-  handles, nudge with the arrow keys, and undo everything. A full layer hierarchy with editor-only
-  hide and lock.
+  icons. They match a real 23.0.1 dump file for file and pane for pane; loading your console's
+  `.szs` files is optional and adds the exact textures.
+- **Figma-style editor.** Game icons, applet buttons and settings rows are components: one click
+  selects the whole thing, double-click goes inside. Drag with smart guides, equal-spacing snapping
+  and a snap grid, resize (components scale as a whole), rotate with the knob, nudge with the arrow
+  keys, and undo everything, including editor-only hide and lock.
+- **Style editing, not just layout.** Vertex and text colours, material colours, the system palette
+  colours qlaunch reads from user data (`C_W` / `C_B`), rounded corners and borders, draw order,
+  and custom applet and lock icons (fitted to the installer's required size), all written to
+  `layout.json` the way the installer reads them.
 - **Installer-exact patching.** Every `layout.json` feature SwitchThemesCommon applies is applied
-  here too, including custom icons and installer compatibility fixes for the target firmware.
-  Tested with community packs as well as the examples.
+  here too: custom icons (`album.png` … `lock.png`), theme animations and the installer's ten
+  compatibility fixes for the target firmware. Tested with community packs (Vertical Blue Lava
+  Lamp, Project Clean, PS5 Theme) as well as the examples.
+- **Compatibility check.** Lists what a theme patches that isn't on the firmware (usually layouts
+  written for an older one) and flags animations the installer would drop.
 - **Live preview mode.** Use the screen like the console: move focus between games, switch Basic
-  White / Basic Black, change users, games and the clock, and choose whether a game is suspended.
-  Player select opens over the blurred Home menu, as on the console.
+  White / Basic Black, change users and their pictures, games and the clock, and choose whether a
+  game is suspended. Player select opens over the blurred Home menu, as on the console.
 - **Projects saved locally.** Themes autosave to IndexedDB and appear under Recent on the start page.
 - **One-click export** of a screen (`.nxtheme`) or the whole theme (`.zip`), ready for NXThemes Installer.
 
 ## Screens
 
 <p align="center">
-  <img src="docs/screenshots/gallery.jpg" alt="Preview of four screens: stock Home and lock screen in Basic White and Purple Skies' Home menu and System Settings" />
+  <img src="docs/screenshots/gallery.jpg" alt="Six previews: stock Home and lock screen in Basic White, Purple Skies' Home menu and System Settings, and Vertical OEM's Home menu and All Software in Basic Black" />
   <br />
-  <sub>Stock Home and lock screen (Basic White) and the Purple Skies theme (Home, System Settings), as rendered by the studio.</sub>
+  <sub>As rendered by the studio. Top: stock Home and lock screen (Basic White), Purple Skies' Home menu. Bottom: Purple Skies' System Settings, Vertical OEM's Home menu and All Software (Basic Black).</sub>
 </p>
 
 <table>
@@ -132,21 +141,33 @@ The start page offers:
 | Undo / redo | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>, including hiding and locking layers |
 | Deselect | <kbd>Esc</kbd> |
 
+<p align="center">
+  <img src="docs/screenshots/spacing.jpg" width="560" alt="Dragging the Settings applet button: pink markers show 80 px on both sides, equal to its neighbours" />
+  <br />
+  <sub>Equal-spacing snap: the button lands 80 px from both neighbours.</sub>
+</p>
+
 Panels:
 
 - **Screens** (left): the screens in the theme, with their edit counts.
-- **Background / Layout / Console / JSON** tabs: the theme image and adjustments, the layout and
-  installer compatibility, the preview's simulated console state, and the raw `layout.json`.
+- **Background / Layout / Console / JSON** tabs: the theme image and adjustments, the layout,
+  installer fixes and compatibility, the preview's simulated console state, and the raw `layout.json`.
 - **Layers** (right): the full hierarchy, including parts and the layouts the console creates in
-  code. The eye and lock only affect the editor; hiding a pane in the theme is done in the Inspector.
-- **Inspector** (right): position, size, scale, rotation, anchors and visibility of the selected pane,
-  showing what the theme changed and what is stock.
+  code. Components have a violet icon. The eye and lock only affect the editor (and are undoable);
+  hiding a pane in the theme is done in the Inspector.
+- **Inspector** (right): position, size, scale, rotation, anchors and visibility of the selected pane;
+  colours (vertex or text), its material's colours, system palette colours, corner radius and
+  border, and draw order. Changed values are marked and each section reverts to stock.
+- **Custom icons** (Layout tab, Home and lock screen): add or replace `album.png` … `share.png` and
+  `lock.png`; any picture is fitted to the size the installer requires.
 
 ### 3. Preview
 
 Switch the top bar to **Preview** to use the screen like the console: click a game or use the arrow
 keys to move focus. The canvas toolbar switches between Basic White and Basic Black and steps through
-the games.
+the games. The **Console** tab sets the clock, users and their pictures, the games, and whether a
+game is suspended (on the lock screen this switches between the centred HOME button and the
+Continue layout with the status bar).
 
 ### 4. Export
 
@@ -164,6 +185,10 @@ The stock layouts are built in (`public/stock/*.json`). They hold the pane trees
 colours, idle animation values and, for each texture, a short description: a colour, a gradient, a
 rounded shape, or where the console's picture sits in its frame. They contain no Nintendo files or
 pixels. Icons are the studio's own drawings, fitted onto the console's footprint so they line up.
+The pack was generated from firmware 23.0.1, and the Layout tab shows that version.
+
+Textures only change how things look, never where they sit: rendering the community packs with the
+built-in pack and with a real dump gives the same layout to the pixel.
 
 For an exact check with the console's own textures, load your files in **Layout → Console layout** or
 drop a `.szs` on the canvas. In NXThemes Installer choose **Extract home menu → Extract szs layout
@@ -190,13 +215,13 @@ The preview applies everything the installer (SwitchThemesCommon) applies, in th
 | Feature | Notes |
 |---|---|
 | Pane patches | `Position`, `Rotation`, `Scale`, `Size`, `Visible`, origins and parent origins. A partial vector sets missing axes to 0, as in the installer, and the studio warns about it |
-| Colours | `ColorTL`…`ColorBR`: vertex colours on pictures, font colours on text panes |
-| `UsdPatches` | User data, with the injector's type and count rules (e.g. `S_RoundRadius`) |
-| `Materials` | `ForegroundColor` / `BackgroundColor`, texture wrap (`Refs`) and `Transforms` |
-| `PullFrontPanes` / `PushBackPanes` | Draw order within the parent |
+| Colours | `ColorTL`…`ColorBR`: vertex colours on pictures, font colours on text panes (editable) |
+| `UsdPatches` | User data, with the injector's type and count rules: palette colours, `S_RoundRadius`, borders (editable) |
+| `Materials` | `ForegroundColor` / `BackgroundColor` (editable), texture wrap (`Refs`) and `Transforms` |
+| `PullFrontPanes` / `PushBackPanes` | Draw order within the parent (editable: Bring to front / Send to back) |
 | `PatchAppletColorAttrib` | Home applet icons read from their alpha channel |
-| `Anims` | The theme's animations, shown at their resting state |
-| Custom icons | `album.png` … `share.png` on Home and `lock.png` on the lock screen, with the installer's icon patches |
+| `Anims` | The theme's animations, shown at their resting state (texture-scroll tracks too); not editable yet |
+| Custom icons | `album.png` … `share.png`, `lock.png` (editable), with the installer's icon patches |
 | Compatibility fixes | The installer's per-firmware fixes, chosen from `TargetFirmware` |
 
 ## Project structure
@@ -243,9 +268,12 @@ How the renderer and patcher work, and what was learned matching real console sc
 - UI strings come from the console's message files, which aren't included; the preview uses English
   stand-ins.
 - Animations are shown at their resting state, not played.
-- Some content is laid out by code on the console (All Software rows, Settings pages, news cards);
-  the preview reproduces it from the real layouts and measurements.
-- Verified against firmware 23.0.1. Other firmware versions haven't been tested.
+- Some content is laid out by code on the console (All Software rows, Settings pages, news cards,
+  the status bar, the lock screen's state); the preview reproduces it from the real layouts and
+  console screenshots. Several of those screenshots come from older firmware, so a few rules are
+  inferred; see [docs/engineering-notes.md](docs/engineering-notes.md).
+- Built from firmware 23.0.1. Other firmware versions haven't been tested.
+- A theme can only change panes that exist; it can't add new ones (a limit of the theme format).
 
 ## Acknowledgements
 

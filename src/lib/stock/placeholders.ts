@@ -46,6 +46,19 @@ const DRAWINGS: Record<string, Draw> = {
     c.fillRect(0, 0, w, h);
   },
   // News: left half of a speech bubble with text lines (mirrored on the right).
+  // Lock screen HOME button: a house (our own drawing). The console mirrors this texture, so it
+  // holds the left half, with the centre line at the right edge.
+  'EntIcoHome^s': (c, w, h) =>
+    fill(c, () => {
+      c.moveTo(w, h * 0.08);
+      c.lineTo(w, h * 0.66);
+      c.lineTo(w * 0.62, h * 0.66);
+      c.lineTo(w * 0.62, h * 0.92);
+      c.lineTo(w * 0.26, h * 0.92);
+      c.lineTo(w * 0.26, h * 0.5);
+      c.lineTo(0, h * 0.5);
+      c.closePath();
+    }),
   'EntIcoNews_00^s': (c, w, h) => newsHalf(c, w, h),
   'RdtIcoNews_00_Home^s': (c, w, h) => newsHalf(c, w, h),
   'EntIcoNews_01^t': (c, w, h) => fill(c, () => c.rect(0, 0, w * 0.92, h)),

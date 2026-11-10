@@ -3,7 +3,8 @@ import { Eye, EyeOff, ChevronUp, ChevronDown, RotateCcw, AlertTriangle, MousePoi
 import type { ThemeScreen } from '../../types/theme';
 import type { SystemLayout } from '../../lib/layout/systemLayouts';
 import { getPaneInfo } from '../../lib/layout/paneModel';
-import type { JVec3, PaneEdit, PanePatch } from '../../lib/layout/patch';
+import type { JVec3, LayoutPatch, PaneEdit, PanePatch } from '../../lib/layout/patch';
+import { StyleSections } from './StyleSections';
 import type { Origin } from '../../lib/nx/bflyt';
 
 interface InspectorProps {
@@ -12,6 +13,10 @@ interface InspectorProps {
   selectedKey: string | null;
   onEditPane: (key: string, edit: PaneEdit) => void;
   onRevertPane: (key: string, field?: keyof PanePatch) => void;
+  onEditLayout: (fn: (layout: LayoutPatch) => LayoutPatch, opts?: { transient?: boolean }) => void;
+  onCommit: () => void;
+  /** Preview is in Basic Black (palette swatches). */
+  dark: boolean;
 }
 
 interface NumberFieldProps {
@@ -94,7 +99,7 @@ const Section: React.FC<{ title: string; patched: boolean; onRevert?: () => void
   </div>
 );
 
-export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, selectedKey, onEditPane, onRevertPane }) => {
+export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, selectedKey, onEditPane, onRevertPane, onEditLayout, onCommit, dark }) => {
   if (!selectedKey) {
     return (
       <div className="flex flex-col select-none text-[12px]">
@@ -246,6 +251,8 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
             ))}
           </div>
         </Section>
+
+        <StyleSections info={info} layout={activeScreen.layout} dark={dark} onEditLayout={onEditLayout} onCommit={onCommit} />
 
         {patch && (
           <div className="space-y-1.5">

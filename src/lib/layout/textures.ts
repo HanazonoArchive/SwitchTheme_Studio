@@ -11,7 +11,9 @@ import type { StockTexture } from '../stock/stockPack';
  */
 
 const decoded = new WeakMap<BntxTexture | StockTexture, ImageDataLike | null>();
-const canvasCache = new Map<string, HTMLCanvasElement>();
+// Per texture object: built-in stand-ins and console textures share names, so a name key would keep
+// showing the stand-in after the console's .szs is loaded.
+const canvasCache = new WeakMap<BntxTexture | StockTexture, Map<string, HTMLCanvasElement>>();
 
 export type Rgba = [number, number, number, number];
 
@@ -151,7 +153,9 @@ export function paneVisual(
   const mirrorY = isMirror(ref.wrapT) && outside(v0, v1);
 
   const key = `${ref.name}${ALPHA_ONLY.has(tex) ? '#a' : ''}|${black.join(',')}|${white.join(',')}|${vertex.join(',')}|${mirrorX}|${mirrorY}`;
-  let canvas = canvasCache.get(key);
+  let perTex = canvasCache.get(tex);
+  if (!perTex) canvasCache.set(tex, (perTex = new Map()));
+  let canvas = perTex.get(key);
   if (!canvas) {
     const W = img.width * (mirrorX ? 2 : 1);
     const H = img.height * (mirrorY ? 2 : 1);
@@ -170,7 +174,7 @@ export function paneVisual(
       }
     }
     ctx.putImageData(out, 0, 0);
-    canvasCache.set(key, canvas);
+    perTex.set(key, canvas);
   }
   if (mirrorX) {
     u0 /= 2;

@@ -34,6 +34,8 @@ export interface StockArchive {
   target: ScreenTarget;
   firmware: number;
   firmwareHint: string;
+  /** Firmware of the dump the pack was generated from (NXThemes Installer's ver.cfg). */
+  consoleVersion?: string;
   mainLayout: string;
   fileNames: string[];
   layouts: Record<string, Omit<BflytFile, 'byName'>>;
@@ -146,6 +148,7 @@ export function toStockArchive(
   parseAnim: (bytes: Uint8Array) => Animation,
   decode: (name: string) => ImageDataLike | null,
   drawnNames: Set<string>,
+  consoleVersion?: string,
 ): StockArchive {
   const layouts: StockArchive['layouts'] = {};
   for (const [n, f] of sys.layouts) layouts[n] = stripByName(f);
@@ -171,6 +174,7 @@ export function toStockArchive(
     target: sys.target,
     firmware: sys.firmware,
     firmwareHint: sys.firmwareHint,
+    ...(consoleVersion ? { consoleVersion } : {}),
     mainLayout: sys.mainLayout,
     fileNames: [...sys.fileNames],
     layouts,
@@ -198,6 +202,7 @@ export function systemLayoutFromStock(a: StockArchive): SystemLayout {
     mainLayout: a.mainLayout,
     firmware: a.firmware,
     firmwareHint: a.firmwareHint,
+    consoleVersion: a.consoleVersion,
     fileNames: new Set(a.fileNames),
     animations: new Map(Object.entries(a.animations)),
     textures: new Map(Object.entries(a.textures)),

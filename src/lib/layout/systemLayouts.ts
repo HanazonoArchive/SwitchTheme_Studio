@@ -30,6 +30,8 @@ export interface SystemLayout {
   loadedAt: number;
   /** 'console': the user's own .szs (exact textures). 'stock': the built-in layouts. */
   source?: 'console' | 'stock';
+  /** Exact firmware the built-in pack was generated from (ver.cfg of the dump), e.g. "23.0.1". */
+  consoleVersion?: string;
 }
 
 /** Screen archives by target, plus common.szs (shared footer/header layouts) under "common". */

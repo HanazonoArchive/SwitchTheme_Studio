@@ -29,6 +29,15 @@ const find = (root: string): string[] =>
     return statSync(p).isDirectory() ? find(p) : p.toLowerCase().endsWith('.szs') ? [p] : [];
   });
 
+// NXThemes Installer writes the console's firmware next to the extracted files.
+const verFile = find(dir).length ? join(dir, 'ver.cfg') : '';
+let consoleVersion: string | undefined;
+try {
+  consoleVersion = readFileSync(verFile, 'utf8').trim() || undefined;
+} catch {
+  consoleVersion = undefined;
+}
+
 const wanted = new Map(Object.values(STOCK_FILES).map((f) => [f.replace('.json', '.szs').toLowerCase(), f]));
 mkdirSync(out, { recursive: true });
 const drawn = new Set(PLACEHOLDER_NAMES);
@@ -37,7 +46,7 @@ for (const file of find(dir)) {
   const outName = wanted.get(basename(file).toLowerCase());
   if (!outName) continue;
   const sys = parseSystemSzs(basename(file), readFileSync(file));
-  const archive = toStockArchive(sys, parseBflan, (name) => decodeTexture(sys.textures.get(name) as BntxTexture), drawn);
+  const archive = toStockArchive(sys, parseBflan, (name) => decodeTexture(sys.textures.get(name) as BntxTexture), drawn, consoleVersion);
   // f32 values to 4 decimals: same rendering, much smaller files.
   const json = JSON.stringify(archive, (_k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1e4) / 1e4 : v));
   writeFileSync(join(out, outName), json);

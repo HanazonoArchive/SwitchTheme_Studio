@@ -337,7 +337,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
               ) : (
                 <>
                   <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
-                    {system ? <>Built-in stock layout (firmware {system.firmwareHint}). Positions and sizes are the console's; icons are stand-ins.</> : <>Loading the built-in layout…</>}
+                    {system ? <>Built-in stock layout (firmware {system.consoleVersion ?? system.firmwareHint}). Positions and sizes are the console's; icons are stand-ins.</> : <>Loading the built-in layout…</>}
                   </p>
                   <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
                     For the console's own icons and textures, load your files: NXThemes Installer → Extract home menu, then <span className="font-mono">sd:/themes/systemData/extracted/…/lyt/*.szs</span>. They stay in this browser.
@@ -386,15 +386,23 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                       <AlertTriangle className={`w-3.5 h-3.5 ${compat.some((c) => c.severity === 'critical') ? 'text-red-400' : 'text-amber-400'}`} />
                       Compatibility ({compat.length})
                     </span>
+                    {!compat.some((c) => c.severity === 'critical') && (
+                      <div className="text-[12px] leading-snug text-[var(--text-3)]">
+                        Written for an older firmware: these aren't in {system?.source === 'console' ? 'your console\'s' : 'the'} {system?.consoleVersion ?? system?.firmwareHint ?? ''} layouts.
+                        The installer skips them as well, so the console looks like this preview.
+                      </div>
+                    )}
                     {compat.slice(0, 12).map((c, i) => (
                       <div key={i} className={`text-[12px] leading-snug ${c.severity === 'critical' ? 'text-red-300' : 'text-[var(--text-2)]'}`}>
                         <span className="font-mono">{c.item}</span>{' '}
                         {c.type === 'MissingFile'
-                          ? 'file not on this firmware'
+                          ? c.item === 'anim/RdtBase_SystemAppletPos.bflan'
+                            ? 'not on 20.0+ (applet positions come from the installer fix above)'
+                            : 'file not on this firmware'
                           : c.type === 'MissingGroup'
                             ? 'group missing'
                             : c.type === 'MissingPane'
-                              ? 'pane missing'
+                              ? `pane not in ${c.file.replace(/^blyt\//, '').replace(/\.bflyt$/, '')}${c.info ? ` (${c.info})` : ''}`
                               : c.info}
                         {c.severity === 'critical' ? ` in ${c.file.replace('anim/', '')}: the installer drops this animation` : ''}
                       </div>

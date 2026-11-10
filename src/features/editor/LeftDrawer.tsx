@@ -19,6 +19,7 @@ import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { UsersEditor } from './UsersEditor';
+import { CustomIcons } from './CustomIcons';
 
 interface LeftDrawerProps {
   activeTab: RailTab;
@@ -412,6 +413,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 )}
               </div>
             )}
+
+            <CustomIcons screen={activeScreen} onChange={(extraFiles) => onUpdateActiveScreen({ extraFiles })} />
 
             {/* Layout metadata */}
             <div className="space-y-2">

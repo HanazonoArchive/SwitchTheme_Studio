@@ -1,4 +1,4 @@
-import type { PaneKind } from '../nx/bflyt';
+import type { BflytMaterial, BflytPane, PaneKind } from '../nx/bflyt';
 import {
   applyPanePatch,
   findFilePatch,
@@ -32,6 +32,10 @@ export interface PaneInfo {
   missingInStock: boolean;
   /** Installer fixes that touch this pane. */
   fixes: FixLayer[];
+  /** The pane as the console layout has it (colours, user data), when loaded. */
+  stockPane?: BflytPane;
+  /** Its material (stock), when it has one. */
+  material?: BflytMaterial;
 }
 
 /** Installer fixes for a screen, given the console's layout (none when it isn't loaded). */
@@ -68,6 +72,8 @@ export function getPaneInfo(layout: LayoutPatch, sys: SystemLayout | undefined, 
     patch,
     missingInStock: Boolean(sys && (!bflyt || !node)),
     fixes: [...before, ...after].filter((f) => findPanePatch(f.patch, file, pane)),
+    stockPane: node,
+    material: node && node.materialIndex !== undefined ? bflyt?.materials[node.materialIndex] : undefined,
   };
 }
 

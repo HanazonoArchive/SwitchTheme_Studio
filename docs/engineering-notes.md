@@ -237,6 +237,11 @@ screen against the console screenshots that ship with them. What they exercised:
 - **Editor components.** prt1 parts and the slots qlaunch fills in code are components: a click
   selects the whole thing, resizing it changes its Scale so everything inside follows, and the
   rotation knob edits Rotation Z. Equal-spacing snapping measures gaps between siblings.
+- **Style editing.** The Inspector writes `ColorTL`…`ColorBR`, material colours, `UsdPatches` and
+  draw order. User data keeps the stock value count and type (the installer silently ignores a
+  patch that changes either); new float properties use type 2. The installer's draw-order names
+  describe the child list: `PullFrontPanes` moves a pane to index 0 (drawn first, behind) and
+  `PushBackPanes` to the end (on top), so "Bring to front" writes `PushBackPanes`.
 - **Player select** opens over the blurred Home menu, and the add-user button gets its plus icon.
 - **The User page navigation is stacked by code.** Sections follow each other from `N_Top` down,
   so Lava Lamp's `N_Account` at Y -340 still shows "Profile" at the top, as on its console screenshot.

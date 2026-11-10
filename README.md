@@ -56,6 +56,10 @@ browser.
   selects the whole thing, double-click goes inside. Drag with smart guides, equal-spacing snapping
   and a snap grid, resize (components scale as a whole), rotate with the knob, nudge with the arrow
   keys, and undo everything, including editor-only hide and lock.
+- **Style editing, not just layout.** Vertex and text colours, material colours, the system palette
+  colours qlaunch reads from user data (`C_W` / `C_B`), rounded corners and borders, draw order,
+  and custom applet and lock icons (fitted to the installer's required size), all written to
+  `layout.json` the way the installer reads them.
 - **Installer-exact patching.** Every `layout.json` feature SwitchThemesCommon applies is applied
   here too: custom icons (`album.png` … `lock.png`), theme animations and the installer's ten
   compatibility fixes for the target firmware. Tested with community packs (Vertical Blue Lava
@@ -151,8 +155,11 @@ Panels:
 - **Layers** (right): the full hierarchy, including parts and the layouts the console creates in
   code. Components have a violet icon. The eye and lock only affect the editor (and are undoable);
   hiding a pane in the theme is done in the Inspector.
-- **Inspector** (right): position, size, scale, rotation, anchors and visibility of the selected pane,
-  showing what the theme changed and what is stock.
+- **Inspector** (right): position, size, scale, rotation, anchors and visibility of the selected pane;
+  colours (vertex or text), its material's colours, system palette colours, corner radius and
+  border, and draw order. Changed values are marked and each section reverts to stock.
+- **Custom icons** (Layout tab, Home and lock screen): add or replace `album.png` … `share.png` and
+  `lock.png`; any picture is fitted to the size the installer requires.
 
 ### 3. Preview
 
@@ -208,13 +215,13 @@ The preview applies everything the installer (SwitchThemesCommon) applies, in th
 | Feature | Notes |
 |---|---|
 | Pane patches | `Position`, `Rotation`, `Scale`, `Size`, `Visible`, origins and parent origins. A partial vector sets missing axes to 0, as in the installer, and the studio warns about it |
-| Colours | `ColorTL`…`ColorBR`: vertex colours on pictures, font colours on text panes |
-| `UsdPatches` | User data, with the injector's type and count rules (e.g. `S_RoundRadius`) |
-| `Materials` | `ForegroundColor` / `BackgroundColor`, texture wrap (`Refs`) and `Transforms` |
-| `PullFrontPanes` / `PushBackPanes` | Draw order within the parent |
+| Colours | `ColorTL`…`ColorBR`: vertex colours on pictures, font colours on text panes (editable) |
+| `UsdPatches` | User data, with the injector's type and count rules: palette colours, `S_RoundRadius`, borders (editable) |
+| `Materials` | `ForegroundColor` / `BackgroundColor` (editable), texture wrap (`Refs`) and `Transforms` |
+| `PullFrontPanes` / `PushBackPanes` | Draw order within the parent (editable: Bring to front / Send to back) |
 | `PatchAppletColorAttrib` | Home applet icons read from their alpha channel |
-| `Anims` | The theme's animations, shown at their resting state (texture-scroll tracks too) |
-| Custom icons | `album.png` … `share.png` on Home and `lock.png` on the lock screen, with the installer's icon patches |
+| `Anims` | The theme's animations, shown at their resting state (texture-scroll tracks too); not editable yet |
+| Custom icons | `album.png` … `share.png`, `lock.png` (editable), with the installer's icon patches |
 | Compatibility fixes | The installer's per-firmware fixes, chosen from `TargetFirmware` |
 
 ## Project structure

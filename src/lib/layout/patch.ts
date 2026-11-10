@@ -411,3 +411,97 @@ export function findImplicitZeroVectors(layout: LayoutPatch) {
   }
   return issues;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Style editing: colours, user data, materials, draw order                    */
+/* -------------------------------------------------------------------------- */
+
+/** "AABBGGRR" (layout.json) <-> [r, g, b, a]. */
+export function toLayoutColor(c: [number, number, number, number]): string {
+  const b = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return (b(c[3]) + b(c[2]) + b(c[1]) + b(c[0])).toUpperCase();
+}
+
+const withFile = (layout: LayoutPatch, file: string, fn: (f: LayoutFilePatch) => LayoutFilePatch): LayoutPatch => {
+  const files = [...(layout.Files ?? [])];
+  let fi = files.findIndex((f) => f.FileName === file);
+  if (fi < 0) {
+    files.push({ FileName: file, Patches: [] });
+    fi = files.length - 1;
+  }
+  files[fi] = fn({ ...files[fi] });
+  const keep = (f: LayoutFilePatch) => (f.Patches?.length ?? 0) > 0 || f.AddGroups?.length || f.Materials?.length || f.PushBackPanes?.length || f.PullFrontPanes?.length;
+  return { ...layout, Files: files.filter(keep) };
+};
+
+/** Sets (value) or removes (undefined) raw fields of a pane's patch, e.g. ColorTL or UsdPatches. */
+export function setPaneFields(layout: LayoutPatch, file: string, pane: string, fields: Partial<Record<string, unknown>>): LayoutPatch {
+  return withFile(layout, file, (f) => {
+    const patches = [...(f.Patches ?? [])];
+    let pi = patches.findIndex((p) => p.PaneName === pane);
+    if (pi < 0) {
+      patches.push({ PaneName: pane });
+      pi = patches.length - 1;
+    }
+    const p: PanePatch = { ...patches[pi] };
+    for (const [k, v] of Object.entries(fields)) {
+      if (v === undefined) delete p[k];
+      else p[k] = v;
+    }
+    if (Object.keys(p).length > 1) patches[pi] = p;
+    else patches.splice(pi, 1);
+    return { ...f, Patches: patches };
+  });
+}
+
+/** Sets or removes (values = null) one user-data property of a pane. */
+export function setUsd(layout: LayoutPatch, file: string, pane: string, prop: string, values: (number | string)[] | null, type: number): LayoutPatch {
+  const cur = findPanePatch(layout, file, pane)?.UsdPatches ?? [];
+  const rest = cur.filter((u) => u.PropName !== prop);
+  const next = values ? [...rest, { PropName: prop, PropValues: values.map(String), type }] : rest;
+  return setPaneFields(layout, file, pane, { UsdPatches: next.length ? next : undefined });
+}
+
+/** Sets or removes (null) a material's colours. */
+export function setMaterialColors(layout: LayoutPatch, file: string, material: string, colors: { ForegroundColor?: string | null; BackgroundColor?: string | null }): LayoutPatch {
+  return withFile(layout, file, (f) => {
+    const mats = [...(f.Materials ?? [])];
+    let mi = mats.findIndex((m) => m.MaterialName === material);
+    if (mi < 0) {
+      mats.push({ MaterialName: material });
+      mi = mats.length - 1;
+    }
+    const m: MaterialPatch = { ...mats[mi] };
+    for (const k of ['ForegroundColor', 'BackgroundColor'] as const) {
+      if (!(k in colors)) continue;
+      if (colors[k]) m[k] = colors[k];
+      else delete m[k];
+    }
+    if (m.ForegroundColor || m.BackgroundColor || m.Refs?.length || m.Transforms?.length) mats[mi] = m;
+    else mats.splice(mi, 1);
+    return { ...f, Materials: mats.length ? mats : undefined };
+  });
+}
+
+/** On screen: 'front' = drawn on top of its siblings, 'back' = behind them. */
+export type DrawOrder = 'front' | 'back' | null;
+
+/**
+ * Where a pane is moved in its parent's draw order. The installer's names are about the child
+ * list, not the screen: PullFrontPanes moves a pane to the start of the list (drawn first, so
+ * behind), PushBackPanes to the end (drawn last, on top).
+ */
+export function drawOrderOf(layout: LayoutPatch, file: string, pane: string): DrawOrder {
+  const f = findFilePatch(layout, file);
+  return f?.PushBackPanes?.includes(pane) ? 'front' : f?.PullFrontPanes?.includes(pane) ? 'back' : null;
+}
+
+export function setDrawOrder(layout: LayoutPatch, file: string, pane: string, order: DrawOrder): LayoutPatch {
+  return withFile(layout, file, (f) => {
+    const toStart = (f.PullFrontPanes ?? []).filter((p) => p !== pane);
+    const toEnd = (f.PushBackPanes ?? []).filter((p) => p !== pane);
+    if (order === 'front') toEnd.push(pane);
+    if (order === 'back') toStart.push(pane);
+    return { ...f, PullFrontPanes: toStart.length ? toStart : undefined, PushBackPanes: toEnd.length ? toEnd : undefined };
+  });
+}

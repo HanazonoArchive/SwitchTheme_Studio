@@ -9,7 +9,7 @@ import { Viewport } from './features/editor/Viewport';
 import { Inspector } from './features/editor/Inspector';
 import { ScreensList } from './features/editor/ScreensList';
 import { LayersPanel } from './features/editor/LayersPanel';
-import type { SnapSettings } from './features/canvas/EditorOverlay';
+import type { SnapSettings, TransformChange } from './features/canvas/EditorOverlay';
 import { buildScene, buildSource, type SceneNode } from './lib/render/scene';
 import { StartPage } from './features/project/StartPage';
 import { saveProject } from './lib/state/projectStore';
@@ -28,9 +28,37 @@ import { STOCK_BG } from './lib/theme/stock';
 import { newScreen } from './lib/theme/nxtheme';
 import type { ScreenTarget } from './types/theme';
 
+interface EditorDoc {
+  project: ThemeProject | null;
+  /** Editor-only: layers hidden with the eye, layers locked against clicks (never exported). */
+  hidden: ReadonlySet<string>;
+  locked: ReadonlySet<string>;
+}
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
 export function App() {
-  const history = useHistory<ThemeProject | null>(null);
-  const project = history.value;
+  // One undo history for the theme and the editor-only eye/lock state, so hiding or locking a
+  // layer is undone like any other step.
+  const doc = useHistory<EditorDoc>({ project: null, hidden: EMPTY_IDS, locked: EMPTY_IDS });
+  const history = useMemo(
+    () => ({
+      set: (next: ThemeProject | null | ((p: ThemeProject | null) => ThemeProject | null), opts?: { transient?: boolean }) =>
+        doc.set((d) => {
+          const project = typeof next === 'function' ? next(d.project) : next;
+          return project === d.project ? d : { ...d, project };
+        }, opts),
+      reset: (project: ThemeProject | null) => doc.reset({ project, hidden: EMPTY_IDS, locked: EMPTY_IDS }),
+      commit: doc.commit,
+      undo: doc.undo,
+      redo: doc.redo,
+      canUndo: doc.canUndo,
+      canRedo: doc.canRedo,
+    }),
+    [doc],
+  );
+  const project = doc.value.project;
+  const hiddenIds = doc.value.hidden;
+  const lockedIds = doc.value.locked;
 
   // Console layouts: the built-in pack, overridden per screen by the user's own .szs files.
   const [stockLayouts, setStockLayouts] = useState<SystemLayoutMap>({});
@@ -54,8 +82,6 @@ export function App() {
   // The selected instance (a layout used 12 times has 12 instances; edits apply to all of them).
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Editor-only visibility and locks (never exported).
-  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(new Set());
-  const [lockedIds, setLockedIds] = useState<ReadonlySet<string>>(new Set());
   const [snap, setSnap] = useState<SnapSettings>({ grid: false, gridSize: 8, guides: true });
   // Which screen is open is view state, not part of undo history.
   const [activeScreenId, setActiveScreenId] = useState<string | null>(null);
@@ -80,8 +106,6 @@ export function App() {
       setActiveScreenId(p.activeScreenId);
       setSelectedKey(null);
       setSelectedId(null);
-      setHiddenIds(new Set());
-      setLockedIds(new Set());
     },
     [history],
   );
@@ -234,9 +258,9 @@ export function App() {
     [activeScreen, systemLayouts, handleEditPane, history],
   );
 
-  // Resize on canvas: size plus the position change that keeps the opposite edge in place.
+  // Resize, scale and rotate on canvas: changes relative to where the gesture started.
   const handleResizePane = useCallback(
-    (key: string, c: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => {
+    (key: string, c: TransformChange, phase: 'start' | 'move' | 'end') => {
       if (!activeScreen) return;
       if (phase === 'start') {
         dragBase.current = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], key).current;
@@ -250,11 +274,16 @@ export function App() {
       const base = dragBase.current;
       if (!base) return;
       const r = (v: number) => Math.round(v * 10) / 10;
-      handleEditPane(
-        key,
-        { position: { X: r(base.position.X + c.dx), Y: r(base.position.Y + c.dy) }, size: { X: r(Math.max(1, c.w)), Y: r(Math.max(1, c.h)) } },
-        { transient: true },
-      );
+      const r3 = (v: number) => Math.round(v * 1000) / 1000;
+      const edit: PaneEdit = { position: { X: r(base.position.X + c.dx), Y: r(base.position.Y + c.dy) } };
+      if (c.w !== undefined && c.h !== undefined) edit.size = { X: r(Math.max(1, c.w)), Y: r(Math.max(1, c.h)) };
+      if (c.scale) edit.scale = { X: r3(base.scale.X * c.scale.x), Y: r3(base.scale.Y * c.scale.y) };
+      if (c.rotation !== undefined) {
+        const z = (((base.rotation.Z + c.rotation) % 360) + 540) % 360 - 180;
+        edit.rotation = { Z: r(z) };
+        delete edit.position;
+      }
+      handleEditPane(key, edit, { transient: true });
     },
     [activeScreen, systemLayouts, handleEditPane, history],
   );
@@ -471,8 +500,8 @@ export function App() {
                 hiddenIds={hiddenIds}
                 lockedIds={lockedIds}
                 onSelect={selectNode}
-                onToggleHidden={(id) => setHiddenIds((s) => toggleIn(s, id))}
-                onToggleLocked={(id) => setLockedIds((s) => toggleIn(s, id))}
+                onToggleHidden={(id) => doc.set((d) => ({ ...d, hidden: toggleIn(d.hidden, id) }))}
+                onToggleLocked={(id) => doc.set((d) => ({ ...d, locked: toggleIn(d.locked, id) }))}
               />
             </div>
             <div className="flex-[2] min-h-[200px] overflow-y-auto">

@@ -124,11 +124,12 @@ The start page offers:
 | Go into a component | Double-click it; clicks then pick at that level. <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+click picks the exact layer |
 | Select parent / first child | <kbd>Shift</kbd>+<kbd>Enter</kbd> / <kbd>Enter</kbd> |
 | Pick the top layer under the cursor | <kbd>Alt</kbd>+click |
-| Move | Drag (snaps to other layers and the screen). <kbd>Alt</kbd> moves freely, <kbd>Shift</kbd> locks an axis |
-| Resize | Drag a handle. <kbd>Shift</kbd> keeps the ratio |
+| Move | Drag (snaps to other layers, the screen and equal spacing between neighbours). <kbd>Alt</kbd> moves freely, <kbd>Shift</kbd> locks an axis |
+| Resize | Drag a handle. <kbd>Shift</kbd> keeps the ratio. A component scales as a whole, with everything in it |
+| Rotate | Drag the round knob above the selection. <kbd>Shift</kbd> snaps to 15° |
 | Nudge | Arrow keys (<kbd>Shift</kbd> = 10 px) |
 | Zoom / pan | Wheel zooms around the cursor, <kbd>Shift</kbd>+wheel pans, <kbd>Space</kbd>+drag or drag empty space pans, double-click fits |
-| Undo / redo | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| Undo / redo | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>, including hiding and locking layers |
 | Deselect | <kbd>Esc</kbd> |
 
 Panels:

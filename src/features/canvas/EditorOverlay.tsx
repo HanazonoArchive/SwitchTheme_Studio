@@ -30,9 +30,32 @@ interface Props {
   snap: SnapSettings;
   onSelect: (node: SceneNode | null) => void;
   onDrag: (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => void;
-  onResize: (key: string, change: { dx: number; dy: number; w: number; h: number }, phase: 'start' | 'move' | 'end') => void;
+  onResize: (key: string, change: TransformChange, phase: 'start' | 'move' | 'end') => void;
   onFocusGame: (index: number) => void;
 }
+
+/**
+ * A canvas transform relative to where the gesture started: position change (layout units) plus
+ * a new size, a scale factor (components scale as a whole) or a rotation change in degrees.
+ */
+export interface TransformChange {
+  dx: number;
+  dy: number;
+  w?: number;
+  h?: number;
+  scale?: { x: number; y: number };
+  rotation?: number;
+}
+
+/** Equal-spacing indicator: a gap drawn between two boxes. */
+interface Gap {
+  axis: 'x' | 'y';
+  from: number;
+  to: number;
+  at: number;
+}
+
+type Box = { x: number; y: number; w: number; h: number };
 
 const KIND_COLOR: Record<string, string> = { pic1: '#e879f9', txt1: '#22d3ee', prt1: '#facc15', wnd1: '#fb923c', pan1: '#a1a1aa', bnd1: '#a1a1aa' };
 const ACCENT = '#2f7cf6';
@@ -53,8 +76,10 @@ const inside = (n: SceneNode, x: number, y: number) => {
 };
 
 type Drag =
-  | { kind: 'move'; node: SceneNode; x0: number; y0: number; box: { x: number; y: number; w: number; h: number }; xs: number[]; ys: number[] }
+  | { kind: 'move'; node: SceneNode; x0: number; y0: number; box: Box; xs: number[]; ys: number[]; peers: Box[] }
   | { kind: 'resize'; node: SceneNode; x0: number; y0: number; handle: [number, number] }
+  | { kind: 'scale'; node: SceneNode; x0: number; y0: number; handle: [number, number]; box: Box; pivot: [number, number] }
+  | { kind: 'rotate'; node: SceneNode; pivot: [number, number]; a0: number; r0: number }
   | { kind: 'pending'; node: SceneNode; x0: number; y0: number };
 
 const HANDLES: [number, number][] = [
@@ -71,7 +96,7 @@ const HANDLES: [number, number][] = [
 export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId, hiddenIds, lockedIds, showAllOutlines, snap, onSelect, onDrag, onResize, onFocusGame }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [guides, setGuides] = useState<{ x: number[]; y: number[]; gaps: Gap[] }>({ x: [], y: [], gaps: [] });
   const drag = useRef<Drag | null>(null);
   // Double-click detection on pointerdown (PointerEvent.detail isn't a reliable click count).
   const lastDown = useRef<{ t: number; x: number; y: number } | null>(null);
@@ -186,10 +211,60 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
     return bestDist <= Math.max(tol, snap.grid ? snap.gridSize / 2 : 0) ? best : { d: 0, at: [] };
   };
 
+  /** Boxes of the moving layer's siblings (what equal spacing is measured against). */
+  const peersOf = (node: SceneNode): Box[] => {
+    const parent = parentOf.get(node.id);
+    if (!parent) return [];
+    const flat = (n: SceneNode): SceneNode[] => n.children.flatMap((c) => (c.kind === 'group' ? flat(c) : [c]));
+    return flat(parent)
+      .filter((c) => c.id !== node.id && !c.hidden && !blockedBy(c.id, hiddenIds))
+      .map((c) => bounds(outline(c)))
+      .filter((b) => b.w > 0.5 && b.h > 0.5 && b.w < scene.width * 1.5 && b.h < scene.height * 1.5);
+  };
+
+  /**
+   * Equal spacing: offsets that put the moving box the same distance from a neighbour as other
+   * neighbours are from each other, or centred between two neighbours.
+   */
+  const spacingSnap = (b: Box, peers: Box[], axis: 'x' | 'y'): { d: number; gaps: Gap[] } | null => {
+    const lo = (r: Box) => (axis === 'x' ? r.x : r.y);
+    const len = (r: Box) => (axis === 'x' ? r.w : r.h);
+    const hi = (r: Box) => lo(r) + len(r);
+    // Only boxes beside the moving one (overlapping on the other axis) count as neighbours.
+    const olo = (r: Box) => (axis === 'x' ? r.y : r.x);
+    const ohi = (r: Box) => olo(r) + (axis === 'x' ? r.h : r.w);
+    const row = peers.filter((r) => ohi(r) > olo(b) && olo(r) < ohi(b)).sort((p, q) => lo(p) - lo(q));
+    if (!row.length) return null;
+    const mid = (olo(b) + ohi(b)) / 2;
+    const gaps: { g: number; a: Box; c: Box }[] = [];
+    for (let i = 1; i < row.length; i++) {
+      const g = lo(row[i]) - hi(row[i - 1]);
+      if (g > 0.5) gaps.push({ g, a: row[i - 1], c: row[i] });
+    }
+    const left = row.filter((r) => hi(r) <= lo(b) + len(b) / 2).pop();
+    const right = row.find((r) => lo(r) >= lo(b) + len(b) / 2);
+    const tol = SNAP_PX / scale;
+    let best: { d: number; gaps: Gap[] } | null = null;
+    const offer = (target: number, show: Gap[]) => {
+      const d = target - lo(b);
+      if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, gaps: show };
+    };
+    const ref = (x: { a: Box; c: Box }): Gap => ({ axis, from: hi(x.a), to: lo(x.c), at: mid });
+    for (const x of gaps) {
+      if (left) offer(hi(left) + x.g, [ref(x), { axis, from: hi(left), to: hi(left) + x.g, at: mid }]);
+      if (right) offer(lo(right) - x.g - len(b), [ref(x), { axis, from: lo(right) - x.g, to: lo(right), at: mid }]);
+    }
+    if (left && right) {
+      const g = (lo(right) - hi(left) - len(b)) / 2;
+      if (g > 0.5) offer(hi(left) + g, [{ axis, from: hi(left), to: hi(left) + g, at: mid }, { axis, from: lo(right) - g, to: lo(right), at: mid }]);
+    }
+    return best;
+  };
+
   const startMove = (node: SceneNode, x: number, y: number) => {
     const box = bounds(outline(node));
     const { xs, ys } = snapLines(node);
-    drag.current = { kind: 'move', node, x0: x, y0: y, box, xs, ys };
+    drag.current = { kind: 'move', node, x0: x, y0: y, box, xs, ys, peers: snap.guides ? peersOf(node) : [] };
     onDrag(node.key, 0, 0, 'start');
   };
 
@@ -243,16 +318,44 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
       const b = cur.box;
       const sx = free ? { d: 0, at: [] } : snapAxis([b.x + dx, b.x + dx + b.w / 2, b.x + dx + b.w], cur.xs, true);
       const sy = free ? { d: 0, at: [] } : snapAxis([b.y + dy, b.y + dy + b.h / 2, b.y + dy + b.h], cur.ys, true);
-      dx += sx.d;
-      dy += sy.d;
+      const moved = { ...b, x: b.x + dx, y: b.y + dy };
+      const gx = free ? null : spacingSnap(moved, cur.peers, 'x');
+      const gy = free ? null : spacingSnap(moved, cur.peers, 'y');
+      // Equal spacing wins when it's at least as close as an edge or centre line.
+      const useGx = !!gx && (!sx.at.length || Math.abs(gx.d) <= Math.abs(sx.d));
+      const useGy = !!gy && (!sy.at.length || Math.abs(gy.d) <= Math.abs(sy.d));
+      dx += useGx ? gx!.d : sx.d;
+      dy += useGy ? gy!.d : sy.d;
       if (e.shiftKey) {
         if (Math.abs(dx) > Math.abs(dy)) dy = 0;
         else dx = 0;
       }
-      setGuides({ x: sx.at, y: sy.at });
+      setGuides({ x: useGx ? [] : sx.at, y: useGy ? [] : sy.at, gaps: [...(useGx ? gx!.gaps : []), ...(useGy ? gy!.gaps : [])] });
       // Screen delta -> the parent's space -> layout units (Y up).
       const [lx, ly] = applyLinear(invert(cur.node.parentWorld), dx, dy);
       onDrag(cur.node.key, lx / cur.node.posScale.x, -ly / cur.node.posScale.y, 'move');
+    } else if (cur.kind === 'scale') {
+      // Components scale as a whole: everything inside follows. The opposite edge stays put.
+      const [hx, hy] = cur.handle;
+      const b = cur.box;
+      let kx = hx ? Math.max(0.05, (b.w + hx * (x - cur.x0)) / b.w) : 1;
+      let ky = hy ? Math.max(0.05, (b.h + hy * (y - cur.y0)) / b.h) : 1;
+      if (e.shiftKey || (hx && hy)) {
+        const k = hx && hy ? Math.max(kx, ky) : hx ? kx : ky;
+        kx = k;
+        ky = k;
+      }
+      const ax = hx === 1 ? b.x : hx === -1 ? b.x + b.w : b.x + b.w / 2;
+      const ay = hy === 1 ? b.y : hy === -1 ? b.y + b.h : b.y + b.h / 2;
+      const [px, py] = cur.pivot;
+      const [lx, ly] = applyLinear(invert(cur.node.parentWorld), (1 - kx) * (ax - px), (1 - ky) * (ay - py));
+      onResize(cur.node.key, { dx: lx / cur.node.posScale.x, dy: -ly / cur.node.posScale.y, scale: { x: kx, y: ky } }, 'move');
+    } else if (cur.kind === 'rotate') {
+      const [px, py] = cur.pivot;
+      // Screen angles grow clockwise; layout rotation grows counter-clockwise.
+      let deg = -((Math.atan2(y - py, x - px) - cur.a0) * 180) / Math.PI;
+      if (e.shiftKey) deg = Math.round((cur.r0 + deg) / 15) * 15 - cur.r0;
+      onResize(cur.node.key, { dx: 0, dy: 0, rotation: Math.round(deg * 10) / 10 }, 'move');
     } else if (cur.kind === 'resize') {
       const n = cur.node;
       // Mouse delta in the node's own (rotated, scaled) space.
@@ -295,11 +398,11 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
   const endDrag = (e: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
-    setGuides({ x: [], y: [] });
+    setGuides({ x: [], y: [], gaps: [] });
     if (!d) return;
     ref.current?.releasePointerCapture(e.pointerId);
     if (d.kind === 'move') onDrag(d.node.key, 0, 0, 'end');
-    if (d.kind === 'resize') onResize(d.node.key, { dx: 0, dy: 0, w: 0, h: 0 }, 'end');
+    if (d.kind === 'resize' || d.kind === 'scale' || d.kind === 'rotate') onResize(d.node.key, { dx: 0, dy: 0 }, 'end');
   };
 
   const startResize = (e: React.PointerEvent, handle: [number, number]) => {
@@ -307,8 +410,20 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
     e.stopPropagation();
     const [x, y] = toLayout(e);
     ref.current!.setPointerCapture(e.pointerId);
-    drag.current = { kind: 'resize', node: selected, x0: x, y0: y, handle };
-    onResize(selected.key, { dx: 0, dy: 0, w: 0, h: 0 }, 'start');
+    drag.current = isComponent(selected)
+      ? { kind: 'scale', node: selected, x0: x, y0: y, handle, box: bounds(outline(selected)), pivot: apply(selected.world, 0, 0) as [number, number] }
+      : { kind: 'resize', node: selected, x0: x, y0: y, handle };
+    onResize(selected.key, { dx: 0, dy: 0 }, 'start');
+  };
+
+  const startRotate = (e: React.PointerEvent) => {
+    if (!selected || e.button !== 0) return;
+    e.stopPropagation();
+    const [x, y] = toLayout(e);
+    ref.current!.setPointerCapture(e.pointerId);
+    const pivot = apply(selected.world, 0, 0) as [number, number];
+    drag.current = { kind: 'rotate', node: selected, pivot, a0: Math.atan2(y - pivot[1], x - pivot[0]), r0: -selected.rotation };
+    onResize(selected.key, { dx: 0, dy: 0 }, 'start');
   };
 
   const sw = 1 / scale;
@@ -318,14 +433,27 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
       .join(' ');
   const hover = hoverId && hoverId !== selectedId ? byId.get(hoverId) : null;
   const selQuad = selected ? outline(selected) : null;
-  // A code-filled slot's size doesn't change what's in it, so it gets no resize handles.
-  const resizable = !!selected && (selected.kind === 'prt1' || !isComponent(selected));
+  // Panes resize; components scale as a whole from their outline.
+  const resizable = !!selected;
+  const comp = !!selected && isComponent(selected);
+  const selBox = selQuad ? bounds(selQuad) : null;
   const handlePoints = selQuad
     ? HANDLES.map(([hx, hy]) => {
+        const h = [hx, hy] as [number, number];
+        if (comp) return { h, p: [selBox!.x + ((hx + 1) / 2) * selBox!.w, selBox!.y + ((hy + 1) / 2) * selBox!.h] as [number, number] };
         const r = selected!.rect;
-        return { h: [hx, hy] as [number, number], p: apply(selected!.world, r.x + ((hx + 1) / 2) * r.w, r.y + ((hy + 1) / 2) * r.h) };
+        return { h, p: apply(selected!.world, r.x + ((hx + 1) / 2) * r.w, r.y + ((hy + 1) / 2) * r.h) };
       })
     : [];
+  // Rotation handle: a knob above the top edge's midpoint (follows the pane's own rotation).
+  const rotateKnob = (() => {
+    if (!selected || !selQuad) return null;
+    const top = comp ? ([selBox!.x + selBox!.w / 2, selBox!.y] as [number, number]) : (apply(selected.world, selected.rect.x + selected.rect.w / 2, selected.rect.y) as [number, number]);
+    const c = comp ? ([selBox!.x + selBox!.w / 2, selBox!.y + selBox!.h / 2] as [number, number]) : (apply(selected.world, selected.rect.x + selected.rect.w / 2, selected.rect.y + selected.rect.h / 2) as [number, number]);
+    const len = Math.hypot(top[0] - c[0], top[1] - c[1]) || 1;
+    const off = 22 / scale;
+    return { from: top, to: [top[0] + ((top[0] - c[0]) / len) * off, top[1] + ((top[1] - c[1]) / len) * off] as [number, number] };
+  })();
   const labelAt = selQuad ? bounds(selQuad) : null;
 
   return (
@@ -366,6 +494,23 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
           {guides.y.map((gy) => (
             <line key={`gy${gy}`} y1={gy} y2={gy} x1={0} x2={scene.width} stroke={GUIDE} strokeWidth={sw} />
           ))}
+          {guides.gaps.map((g, i) => {
+            const [x1, y1, x2, y2] = g.axis === 'x' ? [g.from, g.at, g.to, g.at] : [g.at, g.from, g.at, g.to];
+            const t = 4 / scale;
+            const cross = g.axis === 'x' ? (v: number) => `M ${v} ${g.at - t} L ${v} ${g.at + t}` : (v: number) => `M ${g.at - t} ${v} L ${g.at + t} ${v}`;
+            return (
+              <g key={`gap${i}`}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={GUIDE} strokeWidth={sw} />
+                <path d={`${cross(g.from)} ${cross(g.to)}`} stroke={GUIDE} strokeWidth={sw} />
+                <text x={(x1 + x2) / 2 + (g.axis === 'y' ? 5 / scale : 0)} y={(y1 + y2) / 2 - (g.axis === 'x' ? 5 / scale : 0)} fill={GUIDE} fontSize={10 / scale} textAnchor={g.axis === 'x' ? 'middle' : 'start'}>
+                  {Math.round(g.to - g.from)}
+                </text>
+              </g>
+            );
+          })}
+          {mode === 'edit' && rotateKnob && !selected!.hidden && !blockedBy(selected!.id, lockedIds) && (
+            <line x1={rotateKnob.from[0]} y1={rotateKnob.from[1]} x2={rotateKnob.to[0]} y2={rotateKnob.to[1]} stroke={ACCENT} strokeWidth={sw} />
+          )}
         </svg>
       )}
       {mode === 'edit' && selected && resizable && !selected.hidden && !blockedBy(selected.id, lockedIds) &&
@@ -384,6 +529,21 @@ export const EditorOverlay: React.FC<Props> = ({ scene, scale, mode, selectedId,
             }}
           />
         ))}
+      {mode === 'edit' && rotateKnob && selected && !selected.hidden && !blockedBy(selected.id, lockedIds) && (
+        <div
+          onPointerDown={startRotate}
+          title="Rotate (Shift: 15° steps)"
+          className="absolute bg-white rounded-full"
+          style={{
+            left: rotateKnob.to[0] - 5 / scale,
+            top: rotateKnob.to[1] - 5 / scale,
+            width: 10 / scale,
+            height: 10 / scale,
+            border: `${1.5 / scale}px solid ${ACCENT}`,
+            cursor: 'grab',
+          }}
+        />
+      )}
       {mode === 'edit' && selected && labelAt && (
         <div
           className="absolute pointer-events-none whitespace-nowrap font-medium text-white"

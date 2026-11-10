@@ -298,14 +298,21 @@ function layoutHud(trees: Map<string, BflytPane | null>, layout: LayoutPatch) {
   if (gauge && !findPanePatch(layout, 'blyt/BatteryConsole.bflyt', 'P_GaugeNml')?.Size) gauge.size = { ...gauge.size, X: (gauge.size.X * HUD_BATTERY) / 100 };
 }
 
-export function buildSource(sys: SystemLayout, layout: LayoutPatch, resting: boolean, editable: boolean, icons: AppletIcon[] = []): Source {
+export function buildSource(
+  sys: SystemLayout,
+  layout: LayoutPatch,
+  resting: boolean,
+  editable: boolean,
+  icons: AppletIcon[] = [],
+  opts: { lockCentred?: boolean } = {},
+): Source {
   const iconLayers = icons.map((i) => i.slot.patch);
   const trees = new Map<string, BflytPane | null>();
   const masks = new Map<string, MaskInfo>();
   const mats = new Map<string, Map<string, MaterialOverride>>();
   const materials = new Map<string, BflytMaterial[]>();
   for (const name of sys.layouts.keys()) {
-    const e = patchedFile(sys, layout, name, editable, resting, null, iconLayers);
+    const e = patchedFile(sys, layout, name, editable, resting, name === 'blyt/EntMain.bflyt' && opts.lockCentred ? { lockCentred: true } : null, iconLayers);
     trees.set(name, e.tree);
     mats.set(name, e.mats);
     materials.set(name, e.materials);
@@ -696,8 +703,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const pslMatch = ctx.file === 'blyt/PslSelectSinglePlayer.bflyt' ? /^N_BtnData_(\d+)$/.exec(pane.name) : null;
     // Lock screen: the suspended game's Resume button, or the HOME button when nothing is suspended.
     const lockResume =
-      ctx.file === 'blyt/EntMain.bflyt' && (pane.name === 'L_BtnGame' || pane.name === 'L_BtnSystemApplet')
-        ? (pane.name === 'L_BtnGame') === (runningGame >= 0) && findPanePatch(ctx.src.layout, ctx.file, pane.name)?.Visible !== false
+      ctx.file === 'blyt/EntMain.bflyt' && (pane.name === 'N_Game' || pane.name === 'N_SystemApplet')
+        ? (pane.name === 'N_Game') === (runningGame >= 0) && findPanePatch(ctx.src.layout, ctx.file, pane.name)?.Visible !== false
         : null;
     const runtimeVisible =
       lockResume !== null

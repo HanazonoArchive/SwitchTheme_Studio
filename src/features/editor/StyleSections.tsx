@@ -1,3 +1,4 @@
+import { Stepper } from './NumberField';
 import React from 'react';
 import { RotateCcw, ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
 import type { PaneInfo } from '../../lib/layout/paneModel';
@@ -75,15 +76,22 @@ const ColorField: React.FC<{ label: string; rgba: number[]; changed?: boolean; c
       />
     </label>
     <span className="font-mono text-[11px] text-[var(--text-2)] flex-1 truncate">{compact ? '' : rgbToHex(rgba).toUpperCase()}</span>
-    <input
-      type="number"
-      min={0}
-      max={255}
-      title="Alpha (0–255)"
-      value={Math.round(rgba[3] ?? 255)}
-      onChange={(e) => onChange([rgba[0], rgba[1], rgba[2], Math.max(0, Math.min(255, Number(e.target.value) || 0))], false)}
-      className="w-12 bg-transparent text-right text-[var(--text)] text-xs font-mono outline-none"
-    />
+    <span className="ui-number ui-number-inline" title="Alpha (0–255)">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={Math.round(rgba[3] ?? 255)}
+        onChange={(e) => onChange([rgba[0], rgba[1], rgba[2], Math.max(0, Math.min(255, Number(e.target.value) || 0))], false)}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+          e.preventDefault();
+          const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 16 : 1);
+          onChange([rgba[0], rgba[1], rgba[2], Math.max(0, Math.min(255, Math.round(rgba[3] ?? 255) + d))], false);
+        }}
+        className="ui-number-input w-9"
+      />
+      <Stepper onStep={(d, big) => onChange([rgba[0], rgba[1], rgba[2], Math.max(0, Math.min(255, Math.round(rgba[3] ?? 255) + d * (big ? 16 : 1)))], false)} />
+    </span>
   </div>
 );
 

@@ -70,6 +70,8 @@ export interface SceneNode {
   clip?: { top: number; bottom: number };
   /** Node space -> screen. */
   world: Mat;
+  /** Draw with this matrix instead of x/y/rotation/scale (views that rearrange layers). */
+  matrix?: Mat;
   /** Parent's child space -> screen (to turn screen drags into position changes). */
   parentWorld: Mat;
   /** Layout position units -> node translation (parts magnify). */

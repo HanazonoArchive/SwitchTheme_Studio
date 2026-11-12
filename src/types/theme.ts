@@ -1,4 +1,5 @@
 import type { LayoutPatch } from '../lib/layout/patch';
+import type { Marks } from '../lib/editor/marks';
 
 /** Theme parts, matching CommonInfo.Parts in SwitchThemesCommon. */
 export type ScreenTarget = 'home' | 'lock' | 'apps' | 'set' | 'news' | 'user' | 'psl';
@@ -54,6 +55,8 @@ export interface ThemeProject {
   author: string;
   screens: ThemeScreen[];
   activeScreenId: string;
+  /** Editor-only favourites and colour tags on layers (never exported). */
+  marks?: Marks;
 }
 
 export const NO_ADJUSTMENTS: ImageAdjustments = { brightness: 1, contrast: 1, dim: 0 };

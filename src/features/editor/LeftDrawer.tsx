@@ -19,7 +19,6 @@ import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { UsersEditor } from './UsersEditor';
-import { CustomIcons } from './CustomIcons';
 
 interface LeftDrawerProps {
   activeTab: RailTab;
@@ -61,7 +60,8 @@ const Slider: React.FC<{ name: string; value: number; min: number; max: number; 
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value))}
       onDoubleClick={() => onChange(name === 'Dimming' ? 0 : 1)}
-      className="w-full accent-[var(--accent)] cursor-pointer"
+      className="w-full block"
+      style={{ '--fill': `${((value - min) / (max - min)) * 100}%` } as React.CSSProperties}
       title="Double-click to reset"
     />
   </div>
@@ -431,8 +431,6 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 )}
               </div>
             )}
-
-            <CustomIcons screen={activeScreen} onChange={(extraFiles) => onUpdateActiveScreen({ extraFiles })} />
 
             {/* Layout metadata */}
             <div className="space-y-2">

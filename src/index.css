@@ -90,6 +90,7 @@
     color: var(--text);
   }
   .ui-icon-btn.ui-on {
+    background: rgba(47, 124, 246, 0.22);
     background: color-mix(in oklab, var(--accent) 22%, transparent);
     color: var(--text);
   }
@@ -117,6 +118,14 @@
     background-color: var(--canvas);
     background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
     background-size: 16px 16px;
+  }
+}
+
+/* Firefox (and any browser with the standard properties). */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3c3c42 transparent;
   }
 }
 
@@ -160,5 +169,246 @@
     border: 1px solid var(--border);
     background: var(--panel-2);
     color: var(--text);
+  }
+}
+
+/*
+ * Number fields: a label you can drag to scrub, a text input, and a stepper. Browsers' own
+ * spinners are hidden everywhere so every number input looks the same in every browser.
+ */
+@layer components {
+  .ui-number {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 2px 0 8px;
+    border-radius: 7px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    transition: border-color 0.12s;
+  }
+  .ui-number:hover {
+    border-color: var(--text-3);
+  }
+  .ui-number:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(47, 124, 246, 0.18);
+  }
+  .ui-number-changed {
+    border-color: rgba(47, 124, 246, 0.45);
+  }
+  .ui-number-inline {
+    height: 22px;
+    padding: 0 1px 0 4px;
+    gap: 2px;
+    border-radius: 5px;
+  }
+  .ui-number-label {
+    font: 600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text-3);
+    cursor: ew-resize;
+    user-select: none;
+    touch-action: none;
+    min-width: 12px;
+  }
+  .ui-number-changed .ui-number-label {
+    color: var(--accent);
+  }
+  .ui-number-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    text-align: right;
+    color: var(--text);
+    font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .ui-stepper {
+    display: flex;
+    flex-direction: column;
+    width: 16px;
+    height: 22px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ui-number-inline .ui-stepper {
+    height: 18px;
+    width: 14px;
+  }
+  .ui-stepper button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    touch-action: none;
+  }
+  .ui-stepper button + button {
+    border-top: 1px solid var(--border);
+  }
+  .ui-stepper button:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .ui-stepper button:active:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+  }
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Sliders: a thin track filled up to the thumb (--fill is set inline), the same in every engine. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+  --fill: 50%;
+}
+input[type='range']:focus {
+  outline: none;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) 0 var(--fill), var(--border) var(--fill) 100%);
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s;
+}
+input[type='range']:hover::-webkit-slider-thumb,
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+input[type='range']::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+input[type='range']::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Menus and popovers. */
+@layer components {
+  .ui-menu {
+    position: fixed;
+    z-index: 60;
+    min-width: 220px;
+    max-width: 320px;
+    padding: 4px;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    color: var(--text);
+  }
+  .ui-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 5px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .ui-menu-item:hover:not(:disabled),
+  .ui-menu-item:focus-visible {
+    background: var(--accent);
+    color: #fff;
+    outline: none;
+  }
+  .ui-menu-item:hover:not(:disabled) .ui-menu-hint {
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .ui-menu-item:disabled {
+    opacity: 0.45;
+  }
+  .ui-menu-hint {
+    margin-left: auto;
+    padding-left: 12px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  .ui-menu-sep {
+    height: 1px;
+    margin: 4px 2px;
+    background: var(--border);
+  }
+  .ui-menu-title {
+    padding: 4px 8px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .ui-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 11px;
+    font-size: 11px;
+    color: var(--text-2);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .ui-chip:hover {
+    color: var(--text);
+  }
+  .ui-chip.ui-on {
+    color: #fff;
+    background: var(--accent);
+    border-color: transparent;
+  }
+  .ui-badge-exp {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #1e1e20;
+    background: var(--warn);
   }
 }

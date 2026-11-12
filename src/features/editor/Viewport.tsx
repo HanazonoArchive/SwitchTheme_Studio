@@ -1,49 +1,172 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Grid3x3, Magnet, Minus, Moon, Plus, Scan, Square, Sun } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Grid3x3, Info, Magnet, Minus, Moon, MousePointer2, Plus, Ruler, Scan, Square, Sun, ArrowLeft, SquareDashed } from 'lucide-react';
 import type { ThemeScreen } from '../../types/theme';
 import type { Scene, SceneNode } from '../../lib/render/scene';
 import type { MockSystemState } from '../../types/simulation';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { STOCK_BG } from '../../lib/theme/stock';
+import { bounds } from '../../lib/render/matrix';
 import { PixiView, type Underlay } from '../canvas/PixiView';
-import { EditorOverlay, type SnapSettings, type TransformChange } from '../canvas/EditorOverlay';
+import { EditorOverlay, type MoveDelta, type SnapSettings, type Tool, type TransformChange } from '../canvas/EditorOverlay';
+import { LINES, MEANING, nodeOutline, unionBox, type Exploded, type Pt } from '../canvas/geometry';
 
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
   scene: Scene | null;
   /** Drawn blurred behind the screen (Home behind Player select). */
   underlay?: Underlay | null;
+  /** A component's layers side by side (Layer view), drawn instead of the screen. */
+  exploded: Exploded | null;
+  onExitExploded: () => void;
   mode: 'edit' | 'preview';
   mockState: MockSystemState;
-  selectedId: string | null;
+  selectedIds: string[];
   hiddenIds: ReadonlySet<string>;
   lockedIds: ReadonlySet<string>;
+  changedKeys: ReadonlySet<string>;
   snap: SnapSettings;
   onSnapChange: (s: SnapSettings) => void;
-  onSelect: (node: SceneNode | null) => void;
-  onDragPane: (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => void;
+  onSelect: (node: SceneNode | null, how?: 'replace' | 'toggle') => void;
+  onSelectMany: (nodes: SceneNode[], additive: boolean) => void;
+  onMovePanes: (moves: MoveDelta[], phase: 'start' | 'move' | 'end') => void;
   onResizePane: (key: string, change: TransformChange, phase: 'start' | 'move' | 'end') => void;
+  onContextMenu: (at: { x: number; y: number }, under: SceneNode[], target: SceneNode | null) => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
   onDropFile: (file: File) => void;
 }
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
+const RULER = 20;
+const EMPTY: ReadonlySet<string> = new Set();
+
+/** Ruler tick spacing for a zoom: majors at least ~60 screen px apart. */
+function ticks(scale: number) {
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000];
+  const major = steps.find((s) => s * scale >= 60) ?? 2000;
+  const minor = major / (major % 5 === 0 ? 5 : 4);
+  return { major, minor: minor * scale >= 5 ? minor : major / 2 };
+}
+
+/** One ruler along the top or the left edge, in layout units (console pixels). */
+const RulerBar: React.FC<{
+  axis: 'x' | 'y';
+  length: number;
+  origin: number;
+  scale: number;
+  extent: number;
+  band: [number, number] | null;
+  cursor: number | null;
+}> = ({ axis, length, origin, scale, extent, band, cursor }) => {
+  const { major, minor } = ticks(scale);
+  const u0 = Math.floor(-origin / scale / minor) * minor;
+  const u1 = (length - origin) / scale;
+  const lines: React.ReactNode[] = [];
+  for (let u = u0, i = 0; u <= u1 && i < 2000; u += minor, i++) {
+    const p = origin + u * scale;
+    const isMajor = Math.abs(u / major - Math.round(u / major)) < 1e-6;
+    const t = isMajor ? RULER : u % (major / 2) === 0 ? RULER * 0.45 : RULER * 0.25;
+    lines.push(
+      axis === 'x' ? <line key={u} x1={p} x2={p} y1={RULER - t} y2={RULER} /> : <line key={u} y1={p} y2={p} x1={RULER - t} x2={RULER} />,
+    );
+    if (isMajor)
+      lines.push(
+        axis === 'x' ? (
+          <text key={`t${u}`} x={p + 3} y={9} fontSize={9}>
+            {Math.round(u)}
+          </text>
+        ) : (
+          <text key={`t${u}`} x={9} y={p + 3} fontSize={9} transform={`rotate(-90 9 ${p + 3})`}>
+            {Math.round(u)}
+          </text>
+        ),
+      );
+  }
+  const seg = (a: number, b: number, fill: string, key: string) =>
+    axis === 'x' ? <rect key={key} x={origin + a * scale} y={0} width={(b - a) * scale} height={RULER} fill={fill} /> : <rect key={key} y={origin + a * scale} x={0} height={(b - a) * scale} width={RULER} fill={fill} />;
+  return (
+    <svg
+      className="absolute pointer-events-none text-[var(--text-3)]"
+      style={axis === 'x' ? { left: 0, top: 0, width: length, height: RULER } : { left: 0, top: 0, width: RULER, height: length }}
+      width={axis === 'x' ? length : RULER}
+      height={axis === 'x' ? RULER : length}
+    >
+      <rect width="100%" height="100%" fill="var(--panel)" />
+      {seg(0, extent, 'rgba(255,255,255,0.045)', 'screen')}
+      {band && seg(band[0], band[1], 'rgba(47,124,246,0.28)', 'band')}
+      <g stroke="currentColor" strokeWidth={1} fill="currentColor" shapeRendering="crispEdges" style={{ fontFamily: 'ui-monospace, monospace' }}>
+        {lines}
+      </g>
+      {band && (
+        <g stroke={MEANING.selected.color} strokeWidth={1} shapeRendering="crispEdges">
+          {axis === 'x' ? (
+            <>
+              <line x1={origin + band[0] * scale} x2={origin + band[0] * scale} y1={0} y2={RULER} />
+              <line x1={origin + band[1] * scale} x2={origin + band[1] * scale} y1={0} y2={RULER} />
+            </>
+          ) : (
+            <>
+              <line y1={origin + band[0] * scale} y2={origin + band[0] * scale} x1={0} x2={RULER} />
+              <line y1={origin + band[1] * scale} y2={origin + band[1] * scale} x1={0} x2={RULER} />
+            </>
+          )}
+        </g>
+      )}
+      {cursor !== null &&
+        (axis === 'x' ? (
+          <line x1={origin + cursor * scale} x2={origin + cursor * scale} y1={0} y2={RULER} stroke={MEANING.guide.color} strokeWidth={1} />
+        ) : (
+          <line y1={origin + cursor * scale} y2={origin + cursor * scale} x1={0} x2={RULER} stroke={MEANING.guide.color} strokeWidth={1} />
+        ))}
+      {axis === 'x' ? <line x1={0} x2={length} y1={RULER - 0.5} y2={RULER - 0.5} stroke="var(--border)" /> : <line y1={0} y2={length} x1={RULER - 0.5} x2={RULER - 0.5} stroke="var(--border)" />}
+    </svg>
+  );
+};
+
+/** What outline colours and line styles mean. */
+export const Legend: React.FC = () => (
+  <div className="space-y-2 text-[12px]">
+    <div className="space-y-1">
+      {Object.values(MEANING).map((m) => (
+        <div key={m.label} className="flex items-center gap-2">
+          <span className="w-5 h-3 rounded-sm shrink-0" style={{ border: `2px solid ${m.color}` }} />
+          <span className="text-[var(--text-2)]">{m.label}</span>
+        </div>
+      ))}
+    </div>
+    <div className="h-px bg-[var(--border)]" />
+    <div className="space-y-1">
+      {(['solid', 'dashed', 'dotted', 'thin'] as const).map((k) => (
+        <div key={k} className="flex items-center gap-2">
+          <svg width="20" height="8" className="shrink-0">
+            <line x1="1" y1="4" x2="19" y2="4" stroke="var(--text)" strokeWidth={k === 'thin' ? 1 : 2} strokeDasharray={k === 'dashed' ? '5 3' : k === 'dotted' ? '1.5 2.5' : undefined} />
+          </svg>
+          <span className="text-[var(--text-2)]">{LINES[k]}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 export const Viewport: React.FC<ViewportProps> = ({
   underlay,
   activeScreen,
   scene,
+  exploded,
+  onExitExploded,
   mode,
   mockState,
-  selectedId,
+  selectedIds,
   hiddenIds,
   lockedIds,
+  changedKeys,
   snap,
   onSnapChange,
   onSelect,
-  onDragPane,
+  onSelectMany,
+  onMovePanes,
   onResizePane,
+  onContextMenu,
   onUpdateMockState,
   onDropFile,
 }) => {
@@ -55,6 +178,10 @@ export const Viewport: React.FC<ViewportProps> = ({
   const panning = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const [space, setSpace] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [tool, setTool] = useState<Tool>('select');
+  const [rulers, setRulers] = useState(true);
+  const [legend, setLegend] = useState(false);
+  const [cursor, setCursor] = useState<Pt | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -65,14 +192,24 @@ export const Viewport: React.FC<ViewportProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  // Space held: drag anywhere pans (like Figma).
+  // Space held: drag anywhere pans (like Figma). V / M pick a tool, Shift+R toggles the rulers.
   useEffect(() => {
+    const typing = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      return !!el && (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable);
+    };
     const down = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (e.code === 'Space' && !(t && /INPUT|TEXTAREA|SELECT/.test(t.tagName))) {
+      if (typing(e.target)) return;
+      if (e.code === 'Space') {
         setSpace(true);
         e.preventDefault();
+        return;
       }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'm') setTool((t) => (t === 'measure' ? 'select' : 'measure'));
+      else if (k === 'v') setTool('select');
+      else if (k === 'r' && e.shiftKey) setRulers((r) => !r);
     };
     const up = (e: KeyboardEvent) => e.code === 'Space' && setSpace(false);
     window.addEventListener('keydown', down);
@@ -83,16 +220,18 @@ export const Viewport: React.FC<ViewportProps> = ({
     };
   }, []);
 
-  const w = scene?.width ?? 1280;
-  const h = scene?.height ?? 720;
-  const fit = Math.min((size.width - 64) / w, (size.height - 96) / h);
+  const shown = exploded?.scene ?? scene;
+  const w = shown?.width ?? 1280;
+  const h = shown?.height ?? 720;
+  const inset = rulers && mode === 'edit' ? RULER : 0;
+  const fit = Math.min((size.width - 64 - inset) / w, (size.height - 96 - inset) / h);
   useEffect(() => {
-    view.current = { zoom, pan, fit, size };
+    view.current = { zoom, pan, fit, size, inset };
   });
 
   // Wheel zooms around the cursor (Shift + wheel pans sideways, a trackpad's two-finger scroll with
   // Ctrl is a pinch). The listener is native and non-passive so the browser doesn't zoom the page.
-  const view = useRef({ zoom: 1, pan: { x: 0, y: 0 }, fit: 1, size: { width: 1280, height: 720 } });
+  const view = useRef({ zoom: 1, pan: { x: 0, y: 0 }, fit: 1, size: { width: 1280, height: 720 }, inset: 0 });
   const hasScreen = Boolean(activeScreen);
   useEffect(() => {
     const el = containerRef.current;
@@ -105,8 +244,8 @@ export const Viewport: React.FC<ViewportProps> = ({
         return;
       }
       const r = el.getBoundingClientRect();
-      const cx = e.clientX - r.left - v.size.width / 2 - v.pan.x;
-      const cy = e.clientY - r.top - (v.size.height / 2 - 16) - v.pan.y;
+      const cx = e.clientX - r.left - (v.size.width + v.inset) / 2 - v.pan.x;
+      const cy = e.clientY - r.top - ((v.size.height + v.inset) / 2 - 16) - v.pan.y;
       const step = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
       const next = Math.min(MAX_ZOOM / Math.max(v.fit, 0.01), Math.max(MIN_ZOOM, v.zoom * Math.exp(-step * (e.ctrlKey ? 0.01 : 0.0018))));
       const k = next / v.zoom;
@@ -118,15 +257,29 @@ export const Viewport: React.FC<ViewportProps> = ({
   }, [hasScreen]);
 
   const background = React.useMemo(
-    () => (wallpaperUrl ? { url: wallpaperUrl } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }),
-    [wallpaperUrl, mockState.isDarkTheme],
+    () => (exploded ? { color: '#141416' } : wallpaperUrl ? { url: wallpaperUrl } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }),
+    [wallpaperUrl, mockState.isDarkTheme, exploded],
   );
+
+  const scale = Math.max(0.05, fit * zoom);
+  const left = (size.width + inset) / 2 - (w * scale) / 2 + pan.x;
+  const top = (size.height + inset) / 2 - (h * scale) / 2 + pan.y - 16;
+
+  // Selection extent on the rulers.
+  const band = useMemo(() => {
+    if (!shown || !selectedIds.length) return null;
+    const byId = new Map(shown.flat.map((n) => [n.id, n]));
+    return unionBox(
+      selectedIds
+        .map((id) => byId.get(id))
+        .filter((n): n is SceneNode => !!n)
+        .map((n) => bounds(nodeOutline(shown, n))),
+    );
+  }, [shown, selectedIds]);
 
   if (!activeScreen) return null;
 
-  const scale = Math.max(0.05, fit * zoom);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-
   const zoomTo = (z: number) => setZoom(Math.min(MAX_ZOOM / Math.max(fit, 0.01), Math.max(MIN_ZOOM, z)));
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button === 1 || space || e.target === e.currentTarget) {
@@ -146,8 +299,9 @@ export const Viewport: React.FC<ViewportProps> = ({
   };
 
   const games = mockState.games.length;
+  const showRulers = rulers && mode === 'edit';
   return (
-    <section className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--canvas)] relative">
+    <section className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[var(--canvas)] relative">
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden ui-canvas-bg"
@@ -160,6 +314,7 @@ export const Viewport: React.FC<ViewportProps> = ({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onContextMenu={(e) => e.target === e.currentTarget && e.preventDefault()}
         onDoubleClick={(e) => {
           if (e.target === e.currentTarget) {
             setZoom(1);
@@ -172,44 +327,121 @@ export const Viewport: React.FC<ViewportProps> = ({
           const f = e.dataTransfer.files?.[0];
           if (f) onDropFile(f);
         }}
-        style={{ cursor: isPanning ? 'grabbing' : space ? 'grab' : undefined }}
+        style={{ cursor: isPanning ? 'grabbing' : space ? 'grab' : undefined, touchAction: 'none' }}
       >
         <div
           className="absolute"
           style={{
             width: w * scale,
             height: h * scale,
-            left: size.width / 2 - (w * scale) / 2 + pan.x,
-            top: size.height / 2 - (h * scale) / 2 + pan.y - 16,
+            left,
+            top,
             boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 30px rgba(0,0,0,0.45)',
           }}
         >
           <div className="absolute left-0 top-0 overflow-hidden" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
-            <PixiView scene={scene} underlay={underlay} background={background} resolution={Math.min(4, dpr * scale)} hiddenIds={hiddenIds} />
+            <PixiView scene={shown} underlay={exploded ? null : underlay} background={background} resolution={Math.min(4, dpr * scale)} hiddenIds={exploded ? EMPTY : hiddenIds} />
           </div>
-          {scene && (
+          {exploded && (
+            <div className="absolute left-0 top-0 pointer-events-none" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+              {exploded.tiles.map((t) => (
+                <div
+                  key={t.id}
+                  className="absolute rounded-md"
+                  style={{ left: t.box.x, top: t.box.y, width: t.box.w, height: t.box.h, border: `${1 / scale}px dashed rgba(255,255,255,0.14)` }}
+                >
+                  <div
+                    className="absolute left-0 right-0 bottom-0 truncate text-center"
+                    style={{ fontSize: Math.max(9, 11 / scale), lineHeight: 1.3, padding: `0 ${4 / scale}px ${3 / scale}px`, color: selectedIds.includes(t.id) ? MEANING.selected.color : 'rgba(255,255,255,0.7)' }}
+                  >
+                    {t.name}
+                    {t.note && <span style={{ color: t.note === 'hidden in theme' ? MEANING.hiddenInTheme.color : MEANING.locked.color }}> · {t.note}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {shown && (
             <div className="absolute left-0 top-0" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0', pointerEvents: space ? 'none' : undefined }}>
               <EditorOverlay
-                scene={scene}
+                scene={shown}
                 scale={scale}
                 mode={mode}
-                selectedId={selectedId}
-                hiddenIds={hiddenIds}
+                tool={tool}
+                selectedIds={selectedIds}
+                hiddenIds={exploded ? EMPTY : hiddenIds}
                 lockedIds={lockedIds}
+                changedKeys={changedKeys}
                 showAllOutlines={mockState.wireframeMode}
-                snap={snap}
+                snap={exploded ? { ...snap, guides: false } : snap}
                 onSelect={onSelect}
-                onDrag={onDragPane}
+                onSelectMany={onSelectMany}
+                onMove={onMovePanes}
                 onResize={onResizePane}
+                onContextMenu={onContextMenu}
+                onCursor={setCursor}
+                onToolChange={setTool}
                 onFocusGame={(i) => onUpdateMockState({ selectedGameIndex: i })}
               />
             </div>
           )}
         </div>
+
+        {showRulers && (
+          <>
+            <div className="absolute z-10 pointer-events-none" style={{ left: RULER, top: 0, right: 0, height: RULER }}>
+              <RulerBar axis="x" length={size.width - RULER} origin={left - RULER} scale={scale} extent={w} band={band ? [band.x, band.x + band.w] : null} cursor={cursor ? cursor[0] : null} />
+            </div>
+            <div className="absolute z-10 pointer-events-none" style={{ left: 0, top: RULER, bottom: 0, width: RULER }}>
+              <RulerBar axis="y" length={size.height - RULER} origin={top - RULER} scale={scale} extent={h} band={band ? [band.y, band.y + band.h] : null} cursor={cursor ? cursor[1] : null} />
+            </div>
+            <div
+              className="absolute z-10 left-0 top-0 bg-[var(--panel)] border-r border-b border-[var(--border)] flex items-center justify-center text-[8px] text-[var(--text-3)]"
+              style={{ width: RULER, height: RULER }}
+              title="Rulers in console pixels (1280×720). Shift+R hides them."
+            >
+              px
+            </div>
+            {cursor && (
+              <div className="absolute z-10 pointer-events-none text-[10px] tabular-nums text-[var(--text-2)] bg-[var(--panel)] border border-[var(--border)] rounded px-1.5 py-0.5" style={{ right: 8, top: RULER + 6 }}>
+                {Math.round(cursor[0])}, {Math.round(cursor[1])}
+              </div>
+            )}
+          </>
+        )}
+
+        {exploded && (
+          <div className="absolute z-20 left-1/2 -translate-x-1/2 flex items-center gap-2 h-9 pl-1 pr-3 rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[12px]" style={{ top: inset + 8 }}>
+            <button className="ui-btn !h-7" onClick={onExitExploded} title="Back to the screen (Esc)">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+            <span className="font-medium" style={{ color: MEANING.component.color }}>
+              Layer view
+            </span>
+            <span className="text-[var(--text-2)] truncate max-w-[340px]">
+              {exploded.title} · {exploded.tiles.length} layers. Click one to select and edit it.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Canvas toolbar */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 h-9 px-1 rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[var(--text-2)]">
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 h-9 px-1 rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[var(--text-2)] z-20">
+        {mode === 'edit' && (
+          <>
+            <button className={`ui-icon-btn ${tool === 'select' ? 'ui-on' : ''}`} title="Select and move (V)" onClick={() => setTool('select')}>
+              <MousePointer2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              className={`ui-icon-btn ${tool === 'measure' ? 'ui-on' : ''}`}
+              title="Measure (M): drag from point A to point B for the distance, Δx, Δy and angle. Snaps to edges and centres (Alt: free, Shift: 45°). Esc clears."
+              onClick={() => setTool(tool === 'measure' ? 'select' : 'measure')}
+            >
+              <Ruler className="w-3.5 h-3.5" />
+            </button>
+            <span className="ui-sep" />
+          </>
+        )}
         <button className="ui-icon-btn" title="Zoom out (Ctrl + wheel)" onClick={() => zoomTo(zoom / 1.25)}>
           <Minus className="w-3.5 h-3.5" />
         </button>
@@ -225,6 +457,9 @@ export const Viewport: React.FC<ViewportProps> = ({
         <span className="ui-sep" />
         {mode === 'edit' && (
           <>
+            <button className={`ui-icon-btn ${rulers ? 'ui-on' : ''}`} title="Rulers (Shift+R)" onClick={() => setRulers(!rulers)}>
+              <SquareDashed className="w-3.5 h-3.5" />
+            </button>
             <button className={`ui-icon-btn ${snap.grid ? 'ui-on' : ''}`} title={`Grid ${snap.gridSize}px (snap to grid)`} onClick={() => onSnapChange({ ...snap, grid: !snap.grid })}>
               <Grid3x3 className="w-3.5 h-3.5" />
             </button>
@@ -243,12 +478,23 @@ export const Viewport: React.FC<ViewportProps> = ({
                 </option>
               ))}
             </select>
-            <button className={`ui-icon-btn ${snap.guides ? 'ui-on' : ''}`} title="Snap to other layers and the screen (hold Alt to move freely)" onClick={() => onSnapChange({ ...snap, guides: !snap.guides })}>
+            <button className={`ui-icon-btn ${snap.guides ? 'ui-on' : ''}`} title="Snap to other layers, equal spacing and the screen (hold Alt to move freely)" onClick={() => onSnapChange({ ...snap, guides: !snap.guides })}>
               <Magnet className="w-3.5 h-3.5" />
             </button>
-            <button className={`ui-icon-btn ${mockState.wireframeMode ? 'ui-on' : ''}`} title="Show every layer's outline" onClick={() => onUpdateMockState({ wireframeMode: !mockState.wireframeMode })}>
+            <button className={`ui-icon-btn ${mockState.wireframeMode ? 'ui-on' : ''}`} title="Outline view: every layer's outline, coloured by what it is" onClick={() => onUpdateMockState({ wireframeMode: !mockState.wireframeMode })}>
               <Square className="w-3.5 h-3.5" />
             </button>
+            <div className="relative">
+              <button className={`ui-icon-btn ${legend ? 'ui-on' : ''}`} title="What the outline colours and lines mean" onClick={() => setLegend(!legend)}>
+                <Info className="w-3.5 h-3.5" />
+              </button>
+              {legend && (
+                <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[300px] p-3 rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_10px_32px_rgba(0,0,0,0.5)]">
+                  <div className="text-[12px] font-semibold mb-2">Outlines</div>
+                  <Legend />
+                </div>
+              )}
+            </div>
             <span className="ui-sep" />
           </>
         )}

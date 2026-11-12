@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { Download, FolderOpen, Redo2, Undo2, X } from 'lucide-react';
+import { BookOpen, Bug, Download, FolderGit2, ExternalLink, FolderOpen, Keyboard, LifeBuoy, MoreHorizontal, Redo2, Shapes, ShieldAlert, Undo2, X } from 'lucide-react';
 import type { ThemeProject } from '../../types/theme';
+import { ContextMenu } from './ContextMenu';
+import { INJECTOR_URL, ISSUES_URL, REPO_URL, type HelpTab } from './help';
 
 interface TopBarProps {
   project: ThemeProject | null;
@@ -14,15 +16,22 @@ interface TopBarProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  onHelp: (tab: HelpTab) => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onOpenFiles, onCloseProject, onOpenExportModal, onRenameProject, canUndo, canRedo, onUndo, onRedo }) => {
+const open = (url: string) => window.open(url, '_blank', 'noopener,noreferrer');
+
+export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onOpenFiles, onCloseProject, onOpenExportModal, onRenameProject, canUndo, canRedo, onUndo, onRedo, onHelp }) => {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="h-11 bg-[var(--panel)] border-b border-[var(--border)] px-3 grid grid-cols-[1fr_auto_1fr] items-center shrink-0 z-20">
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-[13px] font-semibold text-[var(--text)] whitespace-nowrap">SwitchTheme Studio</span>
+        <button className="ui-badge-exp" title="Experimental: still a work in progress. Test every theme on your console. Click for the disclaimer." onClick={() => onHelp('legal')}>
+          Experimental
+        </button>
         {project && (
           <>
             <span className="text-[var(--text-3)]">/</span>
@@ -84,6 +93,30 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
             <Download className="w-3.5 h-3.5" />
             Export .nxtheme
           </button>
+        )}
+        <button className={`ui-icon-btn ${menu ? 'ui-on' : ''}`} title="Help, links and disclaimer" onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setMenu(menu ? null : { x: r.right - 240, y: r.bottom + 4 });
+        }}>
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+        {menu && (
+          <ContextMenu
+            at={menu}
+            onClose={() => setMenu(null)}
+            items={[
+              { type: 'item', label: 'Help', icon: <BookOpen className="w-3.5 h-3.5" />, onClick: () => onHelp('start') },
+              { type: 'item', label: 'If something goes wrong', hint: 'black screen…', icon: <LifeBuoy className="w-3.5 h-3.5" />, onClick: () => onHelp('trouble') },
+              { type: 'item', label: 'Keyboard shortcuts', icon: <Keyboard className="w-3.5 h-3.5" />, onClick: () => onHelp('keys') },
+              { type: 'item', label: 'What outlines mean', icon: <Shapes className="w-3.5 h-3.5" />, onClick: () => onHelp('outlines') },
+              { type: 'sep' },
+              { type: 'item', label: 'GitHub repository', icon: <FolderGit2 className="w-3.5 h-3.5" />, hint: '↗', onClick: () => open(REPO_URL) },
+              { type: 'item', label: 'Report a problem', icon: <Bug className="w-3.5 h-3.5" />, hint: '↗', onClick: () => open(ISSUES_URL) },
+              { type: 'item', label: 'SwitchThemeInjector', icon: <ExternalLink className="w-3.5 h-3.5" />, hint: '↗', onClick: () => open(INJECTOR_URL) },
+              { type: 'sep' },
+              { type: 'item', label: 'Disclaimer and caution', icon: <ShieldAlert className="w-3.5 h-3.5" />, onClick: () => onHelp('legal') },
+            ]}
+          />
         )}
       </div>
     </header>

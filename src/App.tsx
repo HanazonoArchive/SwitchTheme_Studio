@@ -9,7 +9,16 @@ import { Viewport } from './features/editor/Viewport';
 import { Inspector } from './features/editor/Inspector';
 import { ScreensList } from './features/editor/ScreensList';
 import { LayersPanel } from './features/editor/LayersPanel';
-import type { SnapSettings, TransformChange } from './features/canvas/EditorOverlay';
+import type { MoveDelta, SnapSettings, TransformChange } from './features/canvas/EditorOverlay';
+import { BottomDock } from './features/editor/BottomDock';
+import { ContextMenu, type MenuItem } from './features/editor/ContextMenu';
+import { HelpDialog } from './features/editor/HelpDialog';
+import { useHelp } from './features/editor/help';
+import { blockedBy, changedKeysOf, explodeScene, MEANING, nodeNotes, parentMap, realParent } from './features/canvas/geometry';
+import { isComponent } from './lib/render/scene';
+import { marksOf, markKey, setMark, TAG_COLORS, type TagColor } from './lib/editor/marks';
+import { checkCompat } from './lib/compat';
+import { AlertTriangle, ArrowDownToLine, ArrowUpToLine, CornerLeftUp, CornerRightDown, Eye, EyeOff, LayoutGrid, Lock, LockOpen, RotateCcw, Star, X } from 'lucide-react';
 import { buildScene, buildSource, type SceneNode } from './lib/render/scene';
 import { StartPage } from './features/project/StartPage';
 import { saveProject } from './lib/state/projectStore';
@@ -17,7 +26,7 @@ import { readThemeFiles } from './lib/theme/nxtheme';
 import { ExportModal } from './features/project/ExportModal';
 
 import { useHistory } from './lib/state/useHistory';
-import { editPane, hasLayoutChanges, revertPane, type LayoutPatch, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
+import { editPane, hasLayoutChanges, revertPane, setDrawOrder, splitPaneKey, type LayoutPatch, type PaneEdit, type PanePatch, type PaneState } from './lib/layout/patch';
 import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
 import { loadAppletIcons, type AppletIcon } from './lib/layout/appletIcons';
@@ -35,6 +44,17 @@ interface EditorDoc {
   locked: ReadonlySet<string>;
 }
 const EMPTY_IDS: ReadonlySet<string> = new Set();
+type EditOpts = { transient?: boolean; label?: string };
+const paneName = (key: string) => key.slice(key.indexOf('::') + 2);
+/** History label for a pane edit: what changed, on which pane. */
+const editLabel = (key: string, e: PaneEdit) => {
+  const verb = e.rotation ? 'Rotate' : e.scale ? 'Scale' : e.size ? 'Resize' : e.position ? 'Move' : e.visible !== undefined ? (e.visible ? 'Show in theme' : 'Hide in theme') : 'Anchor';
+  return `${verb} ${paneName(key)}`;
+};
+const screenLabel = (u: object) => {
+  const k = Object.keys(u);
+  return k.includes('wallpaper') ? 'Background image' : k.includes('adjustments') ? 'Adjust background' : k.includes('extraFiles') ? 'Custom icons' : k.includes('common') ? 'Common layout' : k.includes('layout') ? 'Layout' : 'Edit screen';
+};
 
 export function App() {
   // One undo history for the theme and the editor-only eye/lock state, so hiding or locking a
@@ -42,12 +62,12 @@ export function App() {
   const doc = useHistory<EditorDoc>({ project: null, hidden: EMPTY_IDS, locked: EMPTY_IDS });
   const history = useMemo(
     () => ({
-      set: (next: ThemeProject | null | ((p: ThemeProject | null) => ThemeProject | null), opts?: { transient?: boolean }) =>
+      set: (next: ThemeProject | null | ((p: ThemeProject | null) => ThemeProject | null), opts?: EditOpts) =>
         doc.set((d) => {
           const project = typeof next === 'function' ? next(d.project) : next;
           return project === d.project ? d : { ...d, project };
         }, opts),
-      reset: (project: ThemeProject | null) => doc.reset({ project, hidden: EMPTY_IDS, locked: EMPTY_IDS }),
+      reset: (project: ThemeProject | null) => doc.reset({ project, hidden: EMPTY_IDS, locked: EMPTY_IDS }, project ? `Opened ${project.name}` : 'Closed'),
       commit: doc.commit,
       undo: doc.undo,
       redo: doc.redo,
@@ -81,6 +101,15 @@ export function App() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // The selected instance (a layout used 12 times has 12 instances; edits apply to all of them).
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Other selected layers (multi-select); the primary one above is what the Inspector shows.
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  // Layer view: a component's layers laid out side by side.
+  const [explodeId, setExplodeId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null);
+  const help = useHelp();
+  const [compat, setCompat] = useState(() => checkCompat());
+  // Bumped when the preview font changes (text is laid out again).
+  const [fontTick, setFontTick] = useState(0);
   // Editor-only visibility and locks (never exported).
   const [snap, setSnap] = useState<SnapSettings>({ grid: false, gridSize: 8, guides: true });
   // Which screen is open is view state, not part of undo history.
@@ -106,6 +135,8 @@ export function App() {
       setActiveScreenId(p.activeScreenId);
       setSelectedKey(null);
       setSelectedId(null);
+      setExtraIds([]);
+      setExplodeId(null);
     },
     [history],
   );
@@ -161,7 +192,7 @@ export function App() {
       activeSystem && mainSource && activeScreen
         ? buildScene({ system: activeSystem, main: mainSource, common: commonSource, hasWallpaper: Boolean(activeScreen.wallpaper), mock: screenMock, selectedKey })
         : null,
-    [activeSystem, mainSource, commonSource, activeScreen?.wallpaper, screenMock, selectedKey], // eslint-disable-line react-hooks/exhaustive-deps
+    [activeSystem, mainSource, commonSource, activeScreen?.wallpaper, screenMock, selectedKey, fontTick], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // Player select opens over the Home menu: its transparent parts show Home, blurred.
@@ -176,19 +207,59 @@ export function App() {
     if (!s) return null;
     const url = homeScreen?.wallpaper?.displayUrl;
     return { scene: s, background: url ? { url } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light } };
-  }, [activeScreen?.target, systemLayouts.home, systemLayouts.common, homeScreen, mockState]);
+  }, [activeScreen?.target, systemLayouts.home, systemLayouts.common, homeScreen, mockState, fontTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selectNode = useCallback((n: SceneNode | null) => {
-    setSelectedKey(n?.key ?? null);
-    setSelectedId(n?.id ?? null);
-  }, []);
+  const nodeById = useMemo(() => new Map((scene?.flat ?? []).map((n) => [n.id, n])), [scene]);
+  const parents = useMemo(() => (scene ? parentMap(scene) : new Map<string, SceneNode>()), [scene]);
   // A selection made by key (Inspector, pane lists) shows on its first instance on screen.
   const activeSelectedId = useMemo(() => {
     if (!scene || !selectedKey) return null;
-    const cur = selectedId ? scene.flat.find((n) => n.id === selectedId) : undefined;
+    const cur = selectedId ? nodeById.get(selectedId) : undefined;
     if (cur?.key === selectedKey) return selectedId;
     return scene.flat.find((n) => n.key === selectedKey)?.id ?? null;
-  }, [scene, selectedKey, selectedId]);
+  }, [scene, nodeById, selectedKey, selectedId]);
+  /** Every selected layer, primary last. */
+  const selectedIds = useMemo(() => {
+    const ids = extraIds.filter((id) => id !== activeSelectedId && nodeById.has(id));
+    return activeSelectedId ? [...ids, activeSelectedId] : ids;
+  }, [extraIds, activeSelectedId, nodeById]);
+  const selectedNodes = useMemo(() => selectedIds.map((id) => nodeById.get(id)!).filter(Boolean), [selectedIds, nodeById]);
+
+  const setSelection = useCallback(
+    (ids: string[]) => {
+      const last = ids.length ? nodeById.get(ids[ids.length - 1]) : undefined;
+      setSelectedKey(last?.key ?? null);
+      setSelectedId(last?.id ?? null);
+      setExtraIds(ids.slice(0, -1));
+    },
+    [nodeById],
+  );
+  const selectNode = useCallback(
+    (n: SceneNode | null, how: 'replace' | 'toggle' = 'replace') => {
+      if (!n) return setSelection([]);
+      if (how === 'toggle') {
+        if (selectedIds.includes(n.id)) return setSelection(selectedIds.filter((id) => id !== n.id));
+        return setSelection([...selectedIds, n.id]);
+      }
+      setSelection([n.id]);
+    },
+    [selectedIds, setSelection],
+  );
+  const selectMany = useCallback(
+    (nodes: SceneNode[], additive: boolean) => {
+      const ids = nodes.map((n) => n.id);
+      setSelection(additive ? [...selectedIds.filter((id) => !ids.includes(id)), ...ids] : ids);
+    },
+    [selectedIds, setSelection],
+  );
+  const changedKeys = useMemo(() => changedKeysOf(activeScreen?.layout), [activeScreen?.layout]);
+  const marks = useMemo(() => (activeScreen ? marksOf(project?.marks, activeScreen.id) : new Map()), [project?.marks, activeScreen]);
+  const exploded = useMemo(() => {
+    const n = explodeId ? nodeById.get(explodeId) : undefined;
+    return scene && n ? explodeScene(scene, n, realParent(parents, n)?.file) : null;
+  }, [scene, explodeId, nodeById, parents]);
+  const primaryNode = activeSelectedId ? nodeById.get(activeSelectedId) : undefined;
+  const notes = useMemo(() => (primaryNode ? nodeNotes(primaryNode, realParent(parents, primaryNode)) : []), [primaryNode, parents]);
   const toggleIn = (set: ReadonlySet<string>, id: string) => {
     const next = new Set(set);
     if (next.has(id)) next.delete(id);
@@ -197,16 +268,17 @@ export function App() {
   };
 
   const updateActiveScreen = useCallback(
-    (updates: Partial<ThemeScreen> | ((s: ThemeScreen) => Partial<ThemeScreen>), opts?: { transient?: boolean }) => {
-      history.set((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          screens: prev.screens.map((s) =>
-            s.id === activeId ? { ...s, ...(typeof updates === 'function' ? updates(s) : updates) } : s,
-          ),
-        };
-      }, opts);
+    (updates: Partial<ThemeScreen> | ((s: ThemeScreen) => Partial<ThemeScreen>), opts?: EditOpts) => {
+      history.set(
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            screens: prev.screens.map((s) => (s.id === activeId ? { ...s, ...(typeof updates === 'function' ? updates(s) : updates) } : s)),
+          };
+        },
+        { ...opts, label: opts?.label ?? (typeof updates === 'function' ? 'Edit screen' : screenLabel(updates)) },
+      );
     },
     [history, activeId],
   );
@@ -214,7 +286,7 @@ export function App() {
   /* ------------------------------ pane editing ------------------------------ */
 
   const handleEditPane = useCallback(
-    (key: string, edit: PaneEdit, opts?: { transient?: boolean }) => {
+    (key: string, edit: PaneEdit, opts?: EditOpts) => {
       updateActiveScreen((s) => {
         const sys = systemLayouts[s.target];
         // A layout started in the studio is made for this console: stamp its firmware on the first
@@ -222,21 +294,21 @@ export function App() {
         const base = !hasLayoutChanges(s.layout) && s.layout.TargetFirmware === undefined && sys && sys.firmware >= FW.Fw11_0 ? stampFirmware(s.layout, s.target, sys.firmware) : s.layout;
         const info = getPaneInfo(base, sys, key);
         return { layout: editPane(base, info.file, info.name, info.current, edit) };
-      }, opts);
+      }, { ...opts, label: opts?.label ?? editLabel(key, edit) });
     },
     [updateActiveScreen, systemLayouts],
   );
 
   // Style edits (colours, user data, materials, draw order) work on the whole layout.json.
   const handleEditLayout = useCallback(
-    (fn: (layout: LayoutPatch) => LayoutPatch, opts?: { transient?: boolean }) => {
+    (fn: (layout: LayoutPatch) => LayoutPatch, opts?: EditOpts) => {
       updateActiveScreen((s) => {
         const sys = systemLayouts[s.target];
         const base = !hasLayoutChanges(s.layout) && s.layout.TargetFirmware === undefined && sys && sys.firmware >= FW.Fw11_0 ? stampFirmware(s.layout, s.target, sys.firmware) : s.layout;
         return { layout: fn(base) };
-      }, opts);
+      }, { ...opts, label: opts?.label ?? (selectedKey ? `Style ${paneName(selectedKey)}` : 'Style') });
     },
-    [updateActiveScreen, systemLayouts],
+    [updateActiveScreen, systemLayouts, selectedKey],
   );
 
   const handleRevertPane = useCallback(
@@ -244,28 +316,36 @@ export function App() {
       updateActiveScreen((s) => {
         const info = getPaneInfo(s.layout, systemLayouts[s.target], key);
         return { layout: revertPane(s.layout, info.file, info.name, field) };
-      });
+      }, { label: `Revert ${field ? `${field} of ` : ''}${paneName(key)}` });
     },
     [updateActiveScreen, systemLayouts],
   );
 
-  // Drag on canvas: remember where the pane started, write absolute positions while moving.
+  // Drag on canvas: remember where each pane started, write absolute positions while moving.
+  // Several layers move together (multi-select); a layout used many times is moved once.
   const dragBase = useRef<PaneState | null>(null);
-  const handleDragPane = useCallback(
-    (key: string, dx: number, dy: number, phase: 'start' | 'move' | 'end') => {
+  const moveBase = useRef<Map<string, PaneState>>(new Map());
+  const handleMovePanes = useCallback(
+    (moves: MoveDelta[], phase: 'start' | 'move' | 'end') => {
       if (!activeScreen) return;
       if (phase === 'start') {
-        dragBase.current = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], key).current;
+        moveBase.current = new Map();
+        for (const m of moves) if (!moveBase.current.has(m.key)) moveBase.current.set(m.key, getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], m.key).current);
         return;
       }
       if (phase === 'end') {
-        dragBase.current = null;
+        moveBase.current = new Map();
         history.commit();
         return;
       }
-      const base = dragBase.current;
-      if (!base || (dx === 0 && dy === 0)) return;
-      handleEditPane(key, { position: { X: Math.round(base.position.X + dx), Y: Math.round(base.position.Y + dy) } }, { transient: true });
+      const label = moveBase.current.size > 1 ? `Move ${moveBase.current.size} layers` : `Move ${paneName(moves[0]?.key ?? '')}`;
+      const done = new Set<string>();
+      for (const m of moves) {
+        const base = moveBase.current.get(m.key);
+        if (!base || done.has(m.key)) continue;
+        done.add(m.key);
+        handleEditPane(m.key, { position: { X: Math.round(base.position.X + m.dx), Y: Math.round(base.position.Y + m.dy) } }, { transient: true, label });
+      }
     },
     [activeScreen, systemLayouts, handleEditPane, history],
   );
@@ -319,7 +399,8 @@ export function App() {
         return;
       }
       if (e.key === 'Escape') {
-        selectNode(null);
+        if (explodeId) setExplodeId(null);
+        else selectNode(null);
         return;
       }
       // Shift+Enter selects the parent layer, Enter the first child (like Figma).
@@ -340,14 +421,18 @@ export function App() {
         return;
       }
 
-      // Editor with a selection: arrows nudge the pane (Shift = 10 units).
+      // Editor with a selection: arrows nudge every selected pane (Shift = 10 units).
       if (isEditor && selectedKey && e.key.startsWith('Arrow')) {
         e.preventDefault();
         if (!activeScreen) return;
         const step = e.shiftKey ? 10 : 1;
-        const cur = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], selectedKey).current.position;
         const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key] ?? [0, 0];
-        handleEditPane(selectedKey, { position: { X: cur.X + d[0], Y: cur.Y + d[1] } });
+        const keys = selectedNodes.length ? [...new Set(selectedNodes.filter((n) => n.editable && !blockedBy(n.id, lockedIds)).map((n) => n.key))] : [selectedKey];
+        const label = keys.length > 1 ? `Nudge ${keys.length} layers` : `Nudge ${paneName(keys[0] ?? '')}`;
+        for (const key of keys) {
+          const cur = getPaneInfo(activeScreen.layout, systemLayouts[activeScreen.target], key).current.position;
+          handleEditPane(key, { position: { X: cur.X + d[0], Y: cur.Y + d[1] } }, { label });
+        }
         return;
       }
 
@@ -360,7 +445,198 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [history, isEditor, selectedKey, activeSelectedId, scene, selectNode, activeScreen, systemLayouts, handleEditPane]);
+  }, [history, isEditor, selectedKey, activeSelectedId, scene, selectNode, activeScreen, systemLayouts, handleEditPane, explodeId, selectedNodes, lockedIds]);
+
+  // Leaving with a theme open asks first (Ctrl+W, closing the tab, reloading). The theme is also
+  // saved in this browser as you go, so this is a second line of defence.
+  const hasProject = !!project;
+  useEffect(() => {
+    if (!hasProject) return;
+    const onLeave = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [hasProject]);
+
+  /* ------------------------------ layer menu ------------------------------ */
+
+  const setDoc = doc.set;
+  const layerMenu = useCallback(
+    (target: SceneNode | null, under: SceneNode[]): MenuItem[] => {
+      const items: MenuItem[] = [];
+      if (!activeScreen) return items;
+      const group = target && selectedIds.includes(target.id) && selectedIds.length > 1 ? selectedNodes : target ? [target] : [];
+      const many = group.length > 1;
+      const nameOf = (n: SceneNode) => (n.name === 'RootPane' ? n.file.replace('blyt/', '').replace('.bflyt', '') : n.name);
+      if (under.length > 1) {
+        items.push({ type: 'title', label: 'Layers here (top first)' });
+        for (const n of under.slice(0, 10))
+          items.push({
+            type: 'item',
+            label: nameOf(n),
+            hint: n.file.replace('blyt/', '').replace('.bflyt', ''),
+            icon: <span className="w-2 h-2 rounded-full" style={{ background: isComponent(n) ? MEANING.component.color : selectedIds.includes(n.id) ? MEANING.selected.color : 'var(--text-3)' }} />,
+            disabled: !n.editable ? 'Not editable here: shared layout (common.szs)' : blockedBy(n.id, lockedIds) ? 'Locked: unlock it in Layers first' : false,
+            onClick: () => selectNode(n),
+          });
+        items.push({ type: 'sep' });
+      }
+      if (!target) {
+        items.push({ type: 'item', label: 'Nothing to select here', disabled: 'Not applicable: no layer under the cursor', onClick: () => {} });
+        return items;
+      }
+      items.push({ type: 'title', label: many ? `${group.length} layers` : nameOf(target) });
+      const parent = realParent(parents, target);
+      const child = target.children.flatMap((c) => (c.kind === 'group' ? c.children : [c])).find((c) => c.key && c.editable);
+      const notes = nodeNotes(target, parent);
+      const partRoot = target.name === 'RootPane' && !!parent && parent.file !== target.file;
+      if (!many) {
+        items.push({ type: 'item', label: 'Select parent', hint: 'Shift+Enter', icon: <CornerLeftUp className="w-3.5 h-3.5" />, disabled: parent?.key && parent.editable ? false : 'Not applicable: top level', onClick: () => parent && selectNode(parent) });
+        items.push({ type: 'item', label: 'Select first layer inside', hint: 'Enter', icon: <CornerRightDown className="w-3.5 h-3.5" />, disabled: child ? false : 'Not applicable: no layers inside', onClick: () => child && selectNode(child) });
+        items.push({
+          type: 'item',
+          label: 'Layer view',
+          hint: 'side by side',
+          icon: <LayoutGrid className="w-3.5 h-3.5" />,
+          disabled: isComponent(target) ? false : 'Only components have layers to lay out',
+          onClick: () => setExplodeId(target.id),
+        });
+        items.push({ type: 'sep' });
+      }
+      // Editor-only eye and lock (a component's layers follow it).
+      const allHidden = group.every((n) => blockedBy(n.id, hiddenIds));
+      const inherited = group.every((n) => !hiddenIds.has(n.id) && blockedBy(n.id, hiddenIds));
+      items.push({
+        type: 'item',
+        label: allHidden ? 'Show in editor' : 'Hide in editor',
+        hint: 'editor only',
+        icon: allHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />,
+        disabled: inherited ? 'Hidden with its component: show the component instead' : false,
+        onClick: () =>
+          setDoc((d) => {
+            const next = new Set(d.hidden);
+            for (const n of group) {
+              if (allHidden) next.delete(n.id);
+              else next.add(n.id);
+            }
+            return { ...d, hidden: next };
+          }, { label: `${allHidden ? 'Show' : 'Hide'} ${many ? `${group.length} layers` : nameOf(target)} (editor)` }),
+      });
+      const allLocked = group.every((n) => blockedBy(n.id, lockedIds));
+      const lockInherited = group.every((n) => !lockedIds.has(n.id) && blockedBy(n.id, lockedIds));
+      items.push({
+        type: 'item',
+        label: allLocked ? 'Unlock' : 'Lock',
+        hint: 'editor only',
+        icon: allLocked ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />,
+        disabled: lockInherited ? 'Locked with its component: unlock the component instead' : false,
+        onClick: () =>
+          setDoc((d) => {
+            const next = new Set(d.locked);
+            for (const n of group) {
+              if (allLocked) next.delete(n.id);
+              else next.add(n.id);
+            }
+            return { ...d, locked: next };
+          }, { label: `${allLocked ? 'Unlock' : 'Lock'} ${many ? `${group.length} layers` : nameOf(target)}` }),
+      });
+      // In the theme: the pane's Visible flag.
+      const editable = group.filter((n) => n.editable && n.key);
+      const visible = group.every((n) => !n.hiddenOnConsole);
+      items.push({
+        type: 'item',
+        label: visible ? 'Invisible in theme' : 'Visible in theme',
+        hint: 'Visible flag',
+        icon: visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />,
+        disabled: !editable.length ? 'Not editable here: shared layout (common.szs)' : partRoot && !many ? "Not supported: the console ignores a part's RootPane visibility. Hide the part instead." : false,
+        onClick: () => {
+          const label = `${visible ? 'Hide' : 'Show'} ${many ? `${editable.length} layers` : nameOf(target)} in theme`;
+          for (const key of new Set(editable.map((n) => n.key))) handleEditPane(key, { visible: !visible }, { label });
+        },
+      });
+      items.push({ type: 'sep' });
+      // Favourite and colour tag (saved with the project, never exported).
+      const allFav = group.every((n) => marks.get(n.id)?.fav);
+      const mark = (change: { fav?: boolean; color?: TagColor }, label: string) =>
+        history.set((p) => (p ? { ...p, marks: group.reduce((m, n) => setMark(m, markKey(activeScreen.id, n.id), change), p.marks) } : p), { label });
+      items.push({
+        type: 'item',
+        label: allFav ? 'Remove from favourites' : 'Add to favourites',
+        icon: <Star className={`w-3.5 h-3.5 ${allFav ? 'fill-current' : ''}`} />,
+        onClick: () => mark({ fav: !allFav }, `${allFav ? 'Unfavourite' : 'Favourite'} ${many ? `${group.length} layers` : nameOf(target)}`),
+      });
+      const cur = group.length === 1 ? marks.get(target.id)?.color : undefined;
+      items.push({
+        type: 'custom',
+        key: 'tags',
+        render: (close) => (
+          <div className="flex items-center gap-1 px-2 py-1.5">
+            <span className="text-[11px] text-[var(--text-3)] mr-1">Tag</span>
+            {(Object.keys(TAG_COLORS) as TagColor[]).map((c) => (
+              <button
+                key={c}
+                title={c}
+                className="w-4 h-4 rounded-full hover:scale-125 transition-transform"
+                style={{ background: TAG_COLORS[c], boxShadow: cur === c ? '0 0 0 2px var(--panel), 0 0 0 3.5px var(--text)' : undefined }}
+                onClick={() => (mark({ color: c }, `Tag ${many ? `${group.length} layers` : nameOf(target)} ${c}`), close())}
+              />
+            ))}
+            <button title="No tag" className="w-4 h-4 rounded-full border border-[var(--text-3)] flex items-center justify-center text-[var(--text-3)] hover:text-[var(--text)]" onClick={() => (mark({ color: undefined }, `Untag ${many ? `${group.length} layers` : nameOf(target)}`), close())}>
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        ),
+      });
+      items.push({ type: 'sep' });
+      // Draw order and revert.
+      const orderBlock = !editable.length ? 'Not editable here: shared layout (common.szs)' : partRoot && !many ? 'Not applicable: a RootPane has no siblings to reorder' : false;
+      const order = (o: 'front' | 'back') => {
+        const keys = [...new Set(editable.map((n) => n.key))];
+        handleEditLayout((l) => keys.reduce((acc, k) => {
+          const { file, pane } = splitPaneKey(k);
+          return setDrawOrder(acc, file, pane, o);
+        }, l), { label: `${o === 'front' ? 'Bring to front' : 'Send to back'}: ${many ? `${keys.length} layers` : nameOf(target)}` });
+      };
+      items.push({ type: 'item', label: 'Bring to front', icon: <ArrowUpToLine className="w-3.5 h-3.5" />, disabled: orderBlock, onClick: () => order('front') });
+      items.push({ type: 'item', label: 'Send to back', icon: <ArrowDownToLine className="w-3.5 h-3.5" />, disabled: orderBlock, onClick: () => order('back') });
+      const changed = editable.filter((n) => changedKeys.has(n.key));
+      items.push({
+        type: 'item',
+        label: 'Revert to stock',
+        icon: <RotateCcw className="w-3.5 h-3.5" />,
+        danger: true,
+        disabled: changed.length ? false : 'Not changed by this theme',
+        onClick: () => {
+          const keys = [...new Set(changed.map((n) => n.key))];
+          updateActiveScreen((s) => ({
+            layout: keys.reduce((l, k) => {
+              const info = getPaneInfo(l, systemLayouts[s.target], k);
+              return revertPane(l, info.file, info.name);
+            }, s.layout),
+          }), { label: `Revert ${many ? `${keys.length} layers` : nameOf(target)}` });
+        },
+      });
+      const caution = notes.find((n) => n.level !== 'info');
+      if (caution && !many) {
+        items.push({ type: 'sep' });
+        items.push({
+          type: 'custom',
+          key: 'caution',
+          render: () => (
+            <div className={`flex gap-1.5 px-2 py-1.5 text-[11px] leading-snug max-w-[300px] ${caution.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+              <span className="whitespace-normal">{caution.text}</span>
+            </div>
+          ),
+        });
+      }
+      return items;
+    },
+    [activeScreen, selectedIds, selectedNodes, parents, hiddenIds, lockedIds, marks, changedKeys, setDoc, selectNode, handleEditPane, handleEditLayout, history, updateActiveScreen, systemLayouts],
+  );
 
   /* ------------------------------ background ------------------------------ */
 
@@ -418,6 +694,7 @@ export function App() {
       setActiveScreenId(screen.id);
     }
     selectNode(null);
+    setExplodeId(null);
   };
 
   return (
@@ -433,9 +710,11 @@ export function App() {
         onCloseProject={() => {
           history.reset(null);
           selectNode(null);
+          setExplodeId(null);
         }}
+        onHelp={help.open}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        onRenameProject={(name, author) => history.set((p) => (p ? { ...p, name, author } : p))}
+        onRenameProject={(name, author) => history.set((p) => (p ? { ...p, name, author } : p), { label: `Rename to ${name}` })}
         canUndo={history.canUndo}
         canRedo={history.canRedo}
         onUndo={history.undo}
@@ -453,6 +732,7 @@ export function App() {
               onSelectScreen={(id) => {
                 setActiveScreenId(id);
                 selectNode(null);
+                setExplodeId(null);
               }}
               onAddScreen={handleAddScreen}
             />
@@ -480,20 +760,27 @@ export function App() {
           </aside>
         )}
 
-        {project && <Viewport
+        {project && activeScreen && (
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        <Viewport
           activeScreen={activeScreen}
           scene={scene}
           underlay={underlay}
+          exploded={exploded}
+          onExitExploded={() => setExplodeId(null)}
           mode={mode}
           mockState={mockState}
-          selectedId={activeSelectedId}
+          selectedIds={selectedIds}
           hiddenIds={hiddenIds}
           lockedIds={lockedIds}
+          changedKeys={changedKeys}
           snap={snap}
           onSnapChange={setSnap}
           onSelect={selectNode}
-          onDragPane={handleDragPane}
+          onSelectMany={selectMany}
+          onMovePanes={handleMovePanes}
           onResizePane={handleResizePane}
+          onContextMenu={(at, under, target) => setMenu({ at, items: layerMenu(target, under) })}
           onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
           onDropFile={(file) => {
             const n = file.name.toLowerCase();
@@ -501,29 +788,75 @@ export function App() {
             else if (n.endsWith('.nxtheme') || n.endsWith('.zip')) openThemeFiles([file]);
             else handleReplaceWallpaper(file);
           }}
-        />}
+        />
+            <BottomDock
+              steps={doc.steps}
+              current={doc.current}
+              onJump={doc.jumpTo}
+              screen={activeScreen}
+              onChangeExtraFiles={(extraFiles) => updateActiveScreen({ extraFiles })}
+              onFontChange={() => setFontTick((t) => t + 1)}
+            />
+          </div>
+        )}
 
         {activeScreen && (
           <aside className="w-[288px] shrink-0 flex flex-col bg-[var(--panel)] border-l border-[var(--border)] min-h-0">
             <div className="flex-[3] min-h-[160px] border-b border-[var(--border)]">
               <LayersPanel
                 scene={scene}
-                selectedId={activeSelectedId}
+                selectedIds={selectedIds}
                 hiddenIds={hiddenIds}
                 lockedIds={lockedIds}
+                changedKeys={changedKeys}
+                marks={marks}
                 onSelect={selectNode}
-                onToggleHidden={(id) => doc.set((d) => ({ ...d, hidden: toggleIn(d.hidden, id) }))}
-                onToggleLocked={(id) => doc.set((d) => ({ ...d, locked: toggleIn(d.locked, id) }))}
+                onToggleHidden={(id) => doc.set((d) => ({ ...d, hidden: toggleIn(d.hidden, id) }), { label: `${hiddenIds.has(id) ? 'Show' : 'Hide'} ${id.split('/').pop()} (editor)` })}
+                onToggleLocked={(id) => doc.set((d) => ({ ...d, locked: toggleIn(d.locked, id) }), { label: `${lockedIds.has(id) ? 'Unlock' : 'Lock'} ${id.split('/').pop()}` })}
+                onContextMenu={(at, n) => setMenu({ at, items: layerMenu(n, []) })}
+                onExplode={(n) => setExplodeId(n.id)}
               />
             </div>
             <div className="flex-[2] min-h-[200px] overflow-y-auto">
-              <Inspector activeScreen={activeScreen} system={activeSystem} selectedKey={selectedKey} onEditPane={handleEditPane} onRevertPane={handleRevertPane} onEditLayout={handleEditLayout} onCommit={history.commit} dark={screenMock.isDarkTheme} />
+              <Inspector
+                activeScreen={activeScreen}
+                system={activeSystem}
+                selectedKey={selectedKey}
+                onEditPane={handleEditPane}
+                onRevertPane={handleRevertPane}
+                onEditLayout={handleEditLayout}
+                onCommit={history.commit}
+                dark={screenMock.isDarkTheme}
+                notes={notes}
+                alsoSelected={Math.max(0, selectedIds.length - 1)}
+              />
             </div>
           </aside>
         )}
       </div>
 
 
+
+      {menu && <ContextMenu at={menu.at} items={menu.items} onClose={() => setMenu(null)} />}
+      {help.tab && <HelpDialog tab={help.tab} onTab={help.open} onClose={help.close} />}
+      {compat.length > 0 && (
+        <div className={`fixed left-1/2 -translate-x-1/2 bottom-4 z-50 max-w-[640px] w-[calc(100%-32px)] flex gap-2 p-3 rounded-lg border text-[12px] leading-relaxed shadow-[0_10px_32px_rgba(0,0,0,0.5)] ${compat.some((c) => c.severe) ? 'bg-[#3a1f1f] border-red-500/40 text-red-100' : 'bg-[#3a311f] border-amber-500/40 text-amber-100'}`}>
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <b>This browser is missing something the studio uses.</b>
+            <ul className="mt-1 space-y-0.5">
+              {compat.map((c) => (
+                <li key={c.what}>
+                  <b>{c.what}</b>: {c.effect}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <button className="ui-icon-btn !w-6 !h-6 shrink-0" title="Dismiss" onClick={() => setCompat([])}>
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {project && (
         <ExportModal

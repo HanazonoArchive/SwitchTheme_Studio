@@ -256,6 +256,39 @@ screen against the console screenshots that ship with them. What they exercised:
 Remaining differences mostly come from the packs' screenshots being taken on older firmware (User
 page and News structure, an extra Settings entry).
 
+## Round 7: precision tools, multi-select and the editor's own conventions
+
+- **History with labels.** `useHistory` keeps a label and time per step (set at the call site:
+  `editLabel` derives "Move/Resize/Scale/Rotate/Hide in theme X" from the edit) and can `jumpTo` any
+  step. A transient run (a drag) is still one step; the History panel lists past, present and the
+  undone future.
+- **Selection model.** The primary selection (`selectedKey` + `selectedId`, what the Inspector edits)
+  plus `extraIds`. Moves go through `onMove(MoveDelta[])`: the overlay converts the one screen delta
+  into each layer's own parent space and position scale, and App writes each distinct pane key once
+  (a layout used twelve times moves once). Layers inside another moving layer are left out, so a
+  component and its child don't move twice.
+- **Outline meanings** (`geometry.ts`, `MEANING`/`LINES`) are shared by the overlay, Layers and the
+  legend: colour = what (component, changed, hidden in theme, locked), line = state (solid selected,
+  dashed hover, dotted not drawn by the console).
+- **Console limits** (`limits.ts`): runtime overrides found earlier (HUD row X, MypNav section Y,
+  balloon width, part RootPane transform, code-slot size, game icon alpha, runtime text) become
+  notes per pane and field. The Inspector shows them, fields get the note's colour, the drag readout
+  shows the caution while the value changes, and the layer menu disables what can't work with the
+  reason ("Not supported: …", "Not applicable: …").
+- **Layer view** builds a separate scene: each drawn layer of a component is cloned with its
+  children dropped, forced visible, and given a matrix (`SceneNode.matrix`, drawn with
+  `Container.setFromMatrix`) that fits it into a tile. Clones keep ids and keys and get the tile
+  transform applied to `world` and `parentWorld`, so selection and dragging work unchanged.
+- **Preview font.** `mockDraw.FONT` is a live binding changed by `setPreviewFontFamily`; the counter
+  `fontVersion` is part of the canvas texture cache key and App's `fontTick` rebuilds the scene so
+  text is measured again.
+- **Compatibility.** `lib/compat.ts` checks WebGL, IndexedDB, createImageBitmap, pointer events,
+  ResizeObserver and modern CSS at start and lists what's missing. Number inputs are text inputs
+  with our own stepper (no engine spinners), range inputs are styled for WebKit and Gecko, Firefox
+  gets `scrollbar-width/color`, `color-mix` has an rgba fallback, and the canvas uses
+  `touch-action: none` for pens and touch screens. `beforeunload` asks before closing a tab with a
+  theme open.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

@@ -1,5 +1,7 @@
 import React from 'react';
-import { Eye, EyeOff, ChevronUp, ChevronDown, RotateCcw, AlertTriangle, MousePointerClick } from 'lucide-react';
+import { Eye, EyeOff, RotateCcw, AlertTriangle, MousePointerClick, Info, OctagonAlert } from 'lucide-react';
+import { NumberField } from './NumberField';
+import { fieldNote, type PaneNote } from '../../lib/layout/limits';
 import type { ThemeScreen } from '../../types/theme';
 import type { SystemLayout } from '../../lib/layout/systemLayouts';
 import { getPaneInfo } from '../../lib/layout/paneModel';
@@ -17,63 +19,26 @@ interface InspectorProps {
   onCommit: () => void;
   /** Preview is in Basic Black (palette swatches). */
   dark: boolean;
+  /** What the console does with this pane beyond the layout (limits.ts). */
+  notes?: PaneNote[];
+  /** Other layers selected with it (multi-select): edits here apply to the primary one only. */
+  alsoSelected?: number;
 }
 
-interface NumberFieldProps {
-  label: string;
-  value: number;
-  stock?: number | null;
-  step?: number;
-  onChange: (val: number) => void;
-}
+const NOTE_STYLE = {
+  error: { box: 'bg-red-500/10 border-red-500/30 text-red-200', Icon: OctagonAlert, tag: 'Not supported' },
+  warn: { box: 'bg-amber-500/10 border-amber-500/30 text-amber-200', Icon: AlertTriangle, tag: 'Caution' },
+  info: { box: 'bg-sky-500/10 border-sky-500/30 text-sky-200', Icon: Info, tag: 'Note' },
+} as const;
 
-const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
-
-const NumberField: React.FC<NumberFieldProps> = ({ label, value, stock, step = 1, onChange }) => {
-  const [draft, setDraft] = React.useState<string | null>(null);
-  const differs = stock !== undefined && stock !== null && Math.abs(stock - value) > 1e-4;
-  const commit = (raw: string) => {
-    const parsed = parseFloat(raw);
-    if (!isNaN(parsed)) onChange(parsed);
-    setDraft(null);
-  };
+export const NoteBox: React.FC<{ note: PaneNote }> = ({ note }) => {
+  const st = NOTE_STYLE[note.level];
   return (
-    <div
-      onWheel={(e) => {
-        if (document.activeElement !== e.currentTarget.querySelector('input')) return;
-        onChange(Number((value + (e.deltaY < 0 ? step : -step)).toFixed(3)));
-      }}
-      className={`flex items-center justify-between bg-[var(--panel)] border rounded-lg px-2 py-1 transition group ${
-        differs ? 'border-[var(--accent)]/40' : 'border-[var(--border)]'
-      } hover:border-[var(--text-3)] focus-within:border-[var(--accent)]`}
-      title={stock !== undefined && stock !== null ? `Stock: ${fmt(stock)}` : 'Stock value unknown'}
-    >
-      <span className={`text-[12px] font-mono font-bold select-none ${differs ? 'text-[var(--accent)]' : 'text-[var(--text-3)]'}`}>{label}</span>
-      <input
-        type="text"
-        inputMode="decimal"
-        value={draft ?? fmt(value)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={(e) => commit(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? step * 10 : step);
-            setDraft(null);
-            onChange(Number((value + d).toFixed(3)));
-          }
-        }}
-        className="w-full bg-transparent text-right text-[var(--text)] text-xs font-mono outline-none ml-2 min-w-0"
-      />
-      <div className="flex flex-col ml-1.5 opacity-40 group-hover:opacity-100 transition">
-        <button onClick={() => onChange(Number((value + step).toFixed(3)))} className="text-[var(--text-2)] hover:text-[var(--text)]">
-          <ChevronUp className="w-2.5 h-2.5" />
-        </button>
-        <button onClick={() => onChange(Number((value - step).toFixed(3)))} className="text-[var(--text-2)] hover:text-[var(--text)]">
-          <ChevronDown className="w-2.5 h-2.5" />
-        </button>
-      </div>
+    <div className={`flex gap-2 p-2.5 rounded-lg border text-[12px] leading-relaxed ${st.box}`}>
+      <st.Icon className="w-4 h-4 shrink-0 mt-0.5" />
+      <span>
+        <b className="font-semibold">{st.tag}.</b> {note.text}
+      </span>
     </div>
   );
 };
@@ -99,7 +64,7 @@ const Section: React.FC<{ title: string; patched: boolean; onRevert?: () => void
   </div>
 );
 
-export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, selectedKey, onEditPane, onRevertPane, onEditLayout, onCommit, dark }) => {
+export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, selectedKey, onEditPane, onRevertPane, onEditLayout, onCommit, dark, notes = [], alsoSelected = 0 }) => {
   if (!selectedKey) {
     return (
       <div className="flex flex-col select-none text-[12px]">
@@ -121,6 +86,11 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
   const { current: cur, stock, patch } = info;
   const edit = (e: PaneEdit) => onEditPane(selectedKey, e);
   const has = (f: keyof PanePatch) => patch?.[f] !== undefined;
+  // Cautions about a field show on the field itself too (border colour and hover text).
+  const fn = (field: string) => {
+    const n = fieldNote(notes, field);
+    return n ? { note: n.text, noteLevel: n.level } : {};
+  };
 
   const implicitZero = (['Position', 'Rotation', 'Scale', 'Size'] as const).filter((f) => {
     const v = patch?.[f] as JVec3 | undefined;
@@ -158,6 +128,15 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
           )}
         </div>
 
+        {alsoSelected > 0 && (
+          <div className="text-[12px] text-[var(--text-3)] leading-relaxed">
+            +{alsoSelected} more selected. Drag or use the arrow keys to move them together; the fields below edit this layer only.
+          </div>
+        )}
+        {notes.map((n, i) => (
+          <NoteBox key={i} note={n} />
+        ))}
+
         {!system && (
           <div className="flex gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[12px] leading-relaxed">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -176,10 +155,7 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
           </div>
         )}
         {info.missingInStock && (
-          <div className="flex gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-[12px] leading-relaxed">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>This pane isn't in your console's {info.file}. The installer silently skips it, so this patch does nothing on your firmware.</span>
-          </div>
+          <NoteBox note={{ level: 'error', text: `This pane isn't in your console's ${info.file}. The installer silently skips it, so this patch does nothing on your firmware.` }} />
         )}
         {implicitZero.length > 0 && (
           <div className="flex gap-2 p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-200 text-[12px] leading-relaxed">
@@ -192,23 +168,23 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
 
         <Section title="Position" patched={has('Position')} onRevert={() => onRevertPane(selectedKey, 'Position')}>
           <div className="grid grid-cols-2 gap-2">
-            <NumberField label="X" value={cur.position.X} stock={stock?.position.X} onChange={(X) => edit({ position: { X } })} />
-            <NumberField label="Y" value={cur.position.Y} stock={stock?.position.Y} onChange={(Y) => edit({ position: { Y } })} />
+            <NumberField label="X" value={cur.position.X} stock={stock?.position.X} onChange={(X) => edit({ position: { X } })} {...fn('position.x')} />
+            <NumberField label="Y" value={cur.position.Y} stock={stock?.position.Y} onChange={(Y) => edit({ position: { Y } })} {...fn('position.y')} />
           </div>
           <div className="text-[12px] text-[var(--text-3)]">Relative to the parent pane. +Y is up.</div>
         </Section>
 
         <Section title="Size" patched={has('Size')} onRevert={() => onRevertPane(selectedKey, 'Size')}>
           <div className="grid grid-cols-2 gap-2">
-            <NumberField label="W" value={cur.size.X} stock={stock?.size.X} onChange={(X) => edit({ size: { X } })} />
-            <NumberField label="H" value={cur.size.Y} stock={stock?.size.Y} onChange={(Y) => edit({ size: { Y } })} />
+            <NumberField label="W" min={0} value={cur.size.X} stock={stock?.size.X} onChange={(X) => edit({ size: { X } })} {...fn('size')} />
+            <NumberField label="H" min={0} value={cur.size.Y} stock={stock?.size.Y} onChange={(Y) => edit({ size: { Y } })} {...fn('size')} />
           </div>
         </Section>
 
         <Section title="Scale" patched={has('Scale')} onRevert={() => onRevertPane(selectedKey, 'Scale')}>
           <div className="grid grid-cols-2 gap-2">
-            <NumberField label="X" step={0.05} value={cur.scale.X} stock={stock?.scale.X} onChange={(X) => edit({ scale: { X } })} />
-            <NumberField label="Y" step={0.05} value={cur.scale.Y} stock={stock?.scale.Y} onChange={(Y) => edit({ scale: { Y } })} />
+            <NumberField label="X" step={0.05} value={cur.scale.X} stock={stock?.scale.X} onChange={(X) => edit({ scale: { X } })} {...fn('scale')} />
+            <NumberField label="Y" step={0.05} value={cur.scale.Y} stock={stock?.scale.Y} onChange={(Y) => edit({ scale: { Y } })} {...fn('scale')} />
           </div>
           <button onClick={() => edit({ scale: { Y: cur.scale.X } })} className="text-[12px] text-[var(--text-3)] hover:text-[var(--text)]">
             Make Y = X
@@ -216,7 +192,7 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
         </Section>
 
         <Section title="Rotation" patched={has('Rotation')} onRevert={() => onRevertPane(selectedKey, 'Rotation')}>
-          <NumberField label="Z°" step={1} value={cur.rotation.Z} stock={stock?.rotation.Z} onChange={(Z) => edit({ rotation: { Z } })} />
+          <NumberField label="Z°" step={1} value={cur.rotation.Z} stock={stock?.rotation.Z} onChange={(Z) => edit({ rotation: { Z } })} {...fn('rotation')} />
         </Section>
 
         <Section

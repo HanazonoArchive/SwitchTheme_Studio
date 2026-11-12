@@ -4,7 +4,16 @@
  * at 0,0, in layout pixels; the renderer scales the canvas for sharpness.
  */
 
-export const FONT = "'Nunito Sans', 'Poppins', 'Segoe UI', system-ui, sans-serif";
+/** Placeholder for the console's system font (it isn't ours to ship). */
+export const DEFAULT_FONT = "'Nunito Sans', 'Poppins', 'Segoe UI', system-ui, sans-serif";
+/** Font family used to draw text, and a counter that changes with it (cache keys, scene rebuilds). */
+export let FONT = DEFAULT_FONT;
+export let fontVersion = 0;
+/** Draw preview text in another family (a font the user loaded), or back to the placeholder. */
+export function setPreviewFontFamily(family: string | null) {
+  FONT = family ? `'${family}', ${DEFAULT_FONT}` : DEFAULT_FONT;
+  fontVersion++;
+}
 const font = (size: number, weight = 400) => `${weight} ${size}px ${FONT}`;
 
 let measureCtx: CanvasRenderingContext2D | null = null;

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Application, Assets, BlurFilter, Container, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
+import { Application, Assets, BlurFilter, Container, Graphics, Matrix, Sprite, Texture, TilingSprite } from 'pixi.js';
 import type { Border, Content, Scene, SceneNode } from '../../lib/render/scene';
 import type { PaneVisual } from '../../lib/layout/textures';
+import { fontVersion } from '../../lib/render/mockDraw';
 
 /**
  * Draws a scene with PixiJS (WebGL), the way the console composes its layout: textured quads
@@ -50,7 +51,7 @@ const textureOf = (canvas: HTMLCanvasElement) => {
 /** Mock content rendered to canvases, by signature + resolution. */
 const mockTextures = new Map<string, Texture>();
 function mockTexture(sig: string, w: number, h: number, res: number, drawFn: (c: CanvasRenderingContext2D) => void) {
-  const key = `${sig}@${res}`;
+  const key = `${sig}@${res}#${fontVersion}`;
   let t = mockTextures.get(key);
   if (!t) {
     const el = document.createElement('canvas');
@@ -207,9 +208,15 @@ function borderDisplay(b: Border, w: number, h: number, radius?: number): Graphi
 
 function buildDisplay(node: SceneNode, hiddenIds: ReadonlySet<string>, res: number, onImage: () => void): Container {
   const c = new Container();
-  c.position.set(node.x, node.y);
-  c.rotation = (node.rotation * Math.PI) / 180;
-  c.scale.set(node.scaleX, node.scaleY);
+  if (node.matrix) {
+    // A node placed by its full matrix (the exploded component view).
+    const [a, b, cc, d, tx, ty] = node.matrix;
+    c.setFromMatrix(new Matrix(a, b, cc, d, tx, ty));
+  } else {
+    c.position.set(node.x, node.y);
+    c.rotation = (node.rotation * Math.PI) / 180;
+    c.scale.set(node.scaleX, node.scaleY);
+  }
   c.alpha = node.alpha;
   if (node.content) {
     const d = contentDisplay(node.content, node, res, onImage);

@@ -88,7 +88,7 @@ browser.
 - **Installer-exact patching.** Every `layout.json` feature SwitchThemesCommon applies is applied
   here too: custom icons (`album.png` … `lock.png`), theme animations and the installer's ten
   compatibility fixes for the target firmware. Tested with community packs (Vertical Blue Lava
-  Lamp, Project Clean, PS5 Theme) as well as the examples.
+  Lamp, Project Clean, PS5 Theme, Gengar) as well as the examples.
 - **Compatibility check.** Lists what a theme patches that isn't on the firmware (usually layouts
   written for an older one) and flags animations the installer would drop.
 - **Live preview mode.** Use the screen like the console: move focus between games, switch Basic

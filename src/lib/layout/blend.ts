@@ -42,6 +42,14 @@ function rectTopLeft(p: BflytPane, parentW: number, parentH: number) {
   return { x: px + ox, y: py + oy };
 }
 
+/**
+ * A writer that puts no alpha down (hidden, pane alpha 0, or every vertex alpha 0) leaves the
+ * mask empty: what it masks isn't drawn. Gengar makes the Album's P_PictMask transparent, so the
+ * blue fill disappears and only the tinted outline icon shows, as in its console screenshot.
+ */
+const writesNothing = (p: BflytPane) =>
+  !p.visible || p.alpha === 0 || (!!p.colors && [p.colors.TL, p.colors.TR, p.colors.BL, p.colors.BR].every((c) => ((parseInt(c, 16) >>> 24) & 255) === 0));
+
 export function analyseMasks(root: BflytPane, materials: BflytMaterial[]): MaskInfo {
   const info: MaskInfo = { alphaOnly: new Set(), masked: new Map(), textTint: new Map(), hiddenTargets: new Set() };
   // Writers since the last reset, with their parent for geometry.
@@ -59,7 +67,9 @@ export function analyseMasks(root: BflytPane, materials: BflytMaterial[]): MaskI
         else if (p.kind !== 'wnd1') writers.push({ pane: p, parent }); // multiply/add: intersect (edge fades skipped)
       }
       if (usesDstAlpha(mat) && writers.length) {
-        if (writers.some((w) => w.pane.kind === 'txt1')) {
+        if (writers.every((w) => w.pane.kind === 'pic1' && writesNothing(w.pane))) {
+          info.hiddenTargets.add(p.name);
+        } else if (writers.some((w) => w.pane.kind === 'txt1')) {
           info.hiddenTargets.add(p.name);
           for (const w of writers) if (w.pane.kind === 'txt1') info.textTint.set(w.pane.name, p.name);
         } else if (parent && writers.every((w) => w.parent === parent)) {

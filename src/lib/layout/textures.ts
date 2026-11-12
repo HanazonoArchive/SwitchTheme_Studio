@@ -94,7 +94,10 @@ export function paneVisual(
   const matWhite = parseLayoutColor(material.white);
   const black = cb ?? themeColor(parseLayoutColor(material.black), dark);
   // Keep the material's alpha (animations fade panes through it).
-  const white: Rgba = cw ? [cw[0], cw[1], cw[2], Math.min(cw[3], matWhite[3])] : themeColor(matWhite, dark);
+  // A theme that sets C_W to 0 opts out of the palette: the console draws the material's white as
+  // is, in Basic Black too (Gengar's pastel pills, Zhi's white cursors).
+  const cwOff = pane.userData?.C_W !== undefined && !pane.userData.C_W[0];
+  const white: Rgba = cw ? [cw[0], cw[1], cw[2], Math.min(cw[3], matWhite[3])] : cwOff ? matWhite : themeColor(matWhite, dark);
   const mul = (c: Rgba): Rgba => [(c[0] * vertex[0]) / 255, (c[1] * vertex[1]) / 255, (c[2] * vertex[2]) / 255, (c[3] * vertex[3]) / 255];
 
   const ref = material.textures[0];

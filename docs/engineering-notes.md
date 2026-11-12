@@ -289,6 +289,32 @@ page and News structure, an extra Settings entry).
   `touch-action: none` for pens and touch screens. `beforeunload` asks before closing a tab with a
   theme open.
 
+## Gengar theme pack (issue: unsupported top navigation)
+
+Gengar by rafa_c136 (Home: Unison R Pastel Compact by petey) draws its applet row as four pastel
+pills. The pack ships a console screenshot; four things differed and are fixed:
+
+- **Vertex colours from theme animations.** The pill and glyph colours aren't in the patches; the
+  theme's `RdtBtn*_Inactive` animations key them with `FLVC` targets 0–15 (TL/TR/BL/BR × RGBA).
+  The resting state only applied target 16 (pane alpha); it now applies the colour channels to
+  pic1 panes. Pill colours match the screenshot to ±1.
+- **`C_W` 0 is not recoloured.** With `C_W` explicitly 0 the console draws the material's white as
+  is, also in Basic Black; the preview had darkened it with the Basic Black heuristic.
+- **Corner radius after scale.** `P_PictBase` is 72×72, scaled 2×1.3, radius 58: the console draws
+  a pill with round ends, so the radius is clamped to the scaled size and undone per axis
+  (`render/corners.ts`). Uniformly scaled panes are unchanged.
+- **Clock lifted with X 0.** The theme lifts `N_Time` out of the status row with Y 631 and X 0;
+  the console still gives it the row's X (clock at the far left). Purple Skies lifts it with its
+  own X (-140) and keeps it. Rule: the X is kept only when the theme sets both a non-zero X and Y.
+- **Empty alpha masks.** The theme makes the Album's `P_PictMask` transparent; what it masks
+  (`P_Color`) is no longer drawn.
+
+Still different: the Album glyph is tinted by palette 92 (blue) in the preview, while the
+screenshot shows it grey-blue (the animation's vertex colour × ~0.8). The screenshot may come from
+an older firmware's palette; left as is until a 20.0+ console shot shows otherwise. The game row
+and focused card (lower half) weren't part of the issue. The other four packs render pixel-identical
+before and after these changes.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

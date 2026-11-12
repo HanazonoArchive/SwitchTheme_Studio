@@ -47,7 +47,7 @@ export function paneNotes(c: PaneContext): PaneNote[] {
     });
   if (c.codeSlot) out.push({ level: 'info', text: 'Size has no effect here: qlaunch places another layout in this slot. Use Scale to resize what it shows.', fields: ['size'] });
   if (f === 'Hud' && HUD_ROW.has(c.pane))
-    out.push({ level: 'warn', text: 'The console lays out the status row: its X is replaced at runtime. A Y offset lifts the pane out of the row and then its position is kept.', fields: ['position.x'] });
+    out.push({ level: 'warn', text: 'The console lays out the status row: its X is replaced at runtime. Moving it up or down (Y) and setting your own X (not 0) takes it out of the row, and then its position is kept.', fields: ['position.x'] });
   if (f === 'MypNav' && /^N_/.test(c.pane) && c.pane !== 'N_Root' && c.pane !== 'N_Btm')
     out.push({ level: 'warn', text: 'The User page menu is stacked by the console: this section’s Y is replaced at runtime.', fields: ['position.y'] });
   if ((f === 'RdtBalloon' || f === 'FlcBalloon') && BALLOON_SIZED.has(c.pane))

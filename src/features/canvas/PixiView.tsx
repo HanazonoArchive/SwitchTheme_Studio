@@ -3,6 +3,7 @@ import { Application, Assets, BlurFilter, Container, Graphics, Matrix, Sprite, T
 import type { Border, Content, Scene, SceneNode } from '../../lib/render/scene';
 import type { PaneVisual } from '../../lib/layout/textures';
 import { fontVersion } from '../../lib/render/mockDraw';
+import { cornerRadii } from '../../lib/render/corners';
 
 /**
  * Draws a scene with PixiJS (WebGL), the way the console composes its layout: textured quads
@@ -120,6 +121,23 @@ function visualDisplay(v: PaneVisual, w: number, h: number): Container {
   return box;
 }
 
+/** A rounded rectangle with elliptical corners (rx ≠ ry once a non-uniform scale is undone). */
+function roundShape(g: Graphics, w: number, h: number, [rx, ry]: [number, number], y0 = 0): Graphics {
+  if (Math.abs(rx - ry) < 1e-6) return g.roundRect(0, y0, w, h, rx);
+  const k = 0.5523;
+  return g
+    .moveTo(rx, y0)
+    .lineTo(w - rx, y0)
+    .bezierCurveTo(w - rx + rx * k, y0, w, y0 + ry - ry * k, w, y0 + ry)
+    .lineTo(w, y0 + h - ry)
+    .bezierCurveTo(w, y0 + h - ry + ry * k, w - rx + rx * k, y0 + h, w - rx, y0 + h)
+    .lineTo(rx, y0 + h)
+    .bezierCurveTo(rx - rx * k, y0 + h, 0, y0 + h - ry + ry * k, 0, y0 + h - ry)
+    .lineTo(0, y0 + ry)
+    .bezierCurveTo(0, y0 + ry - ry * k, rx - rx * k, y0, rx, y0)
+    .closePath();
+}
+
 function contentDisplay(content: Content, node: SceneNode, res: number, onImage: () => void): Container | null {
   const { rect } = node;
   if (content.type === 'canvas') {
@@ -156,7 +174,7 @@ function contentDisplay(content: Content, node: SceneNode, res: number, onImage:
       }
       if (content.tint) s.tint = content.tint;
       const m = new Graphics();
-      if (content.radius) m.roundRect(0, 0, content.w, content.h, content.radius);
+      if (content.radius) roundShape(m, content.w, content.h, cornerRadii(content.radius, content.w, content.h, node.scaleX, node.scaleY));
       else m.rect(0, 0, content.w, content.h);
       m.fill(0xffffff);
       box.addChild(s, m);
@@ -169,14 +187,15 @@ function contentDisplay(content: Content, node: SceneNode, res: number, onImage:
   const { w, h } = rect;
   const box = new Container();
   box.position.set(rect.x, rect.y);
+  const radii = content.radius ? cornerRadii(content.radius, w, h, node.scaleX, node.scaleY) : null;
   if (content.shadow) {
-    const sh = new Graphics().roundRect(0, 1.5, w, h, content.radius ?? 2).fill({ color: 0, alpha: 0.22 });
+    const sh = roundShape(new Graphics(), w, h, radii ?? [2, 2], 1.5).fill({ color: 0, alpha: 0.22 });
     sh.filters = [new BlurFilter({ strength: 3 })];
     box.addChild(sh);
   }
   let inner: Container = visualDisplay(content.v, w, h);
-  if (content.radius) {
-    const m = new Graphics().roundRect(0, 0, w, h, content.radius).fill(0xffffff);
+  if (radii) {
+    const m = roundShape(new Graphics(), w, h, radii).fill(0xffffff);
     const wrap = new Container();
     wrap.addChild(inner, m);
     wrap.mask = m;

@@ -153,6 +153,19 @@ export function restingAnimations(sys: SystemLayout, layoutFile: string, state: 
     .filter((s) => sys.animations.has(s.name));
 }
 
+const CORNERS = ['TL', 'TR', 'BL', 'BR'] as const;
+
+/** One channel of one corner's vertex colour ("AABBGGRR" strings, as layout.json writes them). */
+function setVertexChannel(pane: BflytPane, target: number, v: number) {
+  const corner = CORNERS[target >> 2];
+  const colors = pane.colors ?? { TL: 'FFFFFFFF', TR: 'FFFFFFFF', BL: 'FFFFFFFF', BR: 'FFFFFFFF' };
+  const n = parseInt(colors[corner], 16) >>> 0;
+  const ch = [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  ch[target & 3] = Math.round(Math.max(0, Math.min(255, v)));
+  const out = (ch[0] | (ch[1] << 8) | (ch[2] << 16) | (ch[3] << 24)) >>> 0;
+  pane.colors = { ...colors, [corner]: out.toString(16).toUpperCase().padStart(8, '0') };
+}
+
 const FLPA = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'w', 'h'] as const;
 
 /** Applies the resting animations to a (patched, cloned) pane tree in place. */
@@ -185,6 +198,10 @@ export function applyRestingState(
             if (tag.type === 'FLVI' && c.target === 0) pane.visible = v >= 0.5;
             else if (tag.type === 'FLVC' && c.target === 16) {
               if (!CODE_ALPHA[layoutFile]?.includes(pane.name)) pane.alpha = Math.max(0, Math.min(255, v));
+            } else if (tag.type === 'FLVC' && c.target < 16 && pane.kind === 'pic1') {
+              // Vertex colours: TL, TR, BL, BR × R, G, B, A (themes colour buttons this way, e.g.
+              // Gengar's pastel applet pills in their Inactive animation).
+              setVertexChannel(pane, c.target, v);
             }
             else if (tag.type === 'FLPA') {
               const k = FLPA[c.target];

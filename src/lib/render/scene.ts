@@ -301,10 +301,12 @@ function layoutHud(trees: Map<string, BflytPane | null>, layout: LayoutPatch) {
         const p = chain[i]!;
         // qlaunch lays the row out itself: a theme's X for a pane that stays in the row is
         // overwritten (Project Clean and the injector's Legacy_Diamond set N_Time to X 10 and the
-        // clock still sits left of the Wi-Fi icon). A pane the theme lifts out of the row keeps
-        // its position (Purple Skies moves the clock into its top bar). Both from console shots.
+        // clock still sits left of the Wi-Fi icon). A pane the theme lifts out of the row with
+        // its own X keeps its position (Purple Skies: X -140, Y 640, clock in its top bar); one
+        // lifted with X 0 still gets the row's X (Gengar: X 0, Y 631, clock at the far left of
+        // its top edge, above the battery). All three from the packs' console screenshots.
         const moved = findPanePatch(layout, 'blyt/Hud.bflyt', p.name)?.Position;
-        if (!moved || (moved.Y ?? 0) === 0) p.position = { ...p.position, X: x };
+        if (!moved || (moved.Y ?? 0) === 0 || !moved.X) p.position = { ...p.position, X: x };
         x = p.position.X - p.size.X;
       }
     }

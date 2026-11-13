@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { Note } from '../../components/Note';
 import { Upload, Download, Eye, EyeOff, Plus, Trash2, Clock, Cpu, Search, RotateCcw, AlertTriangle, ImageOff, Image as ImageIcon, Check, Wrench } from 'lucide-react';
 export type RailTab = 'media' | 'panes' | 'mock' | 'json';
 const TABS: { id: RailTab; label: string }[] = [
@@ -454,13 +455,13 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                         }`}
                       >
                         <span className={`font-mono text-[12px] truncate ${p.Visible === false ? 'line-through text-[var(--text-3)]' : ''}`}>{p.PaneName}</span>
-                        <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100">
+                        <div className="flex items-stretch self-stretch opacity-60 group-hover:opacity-100">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onEditPane(key, { visible: p.Visible === false });
                             }}
-                            className="p-0.5 text-[var(--text-2)] hover:text-[var(--text)]"
+                            className="ui-row-action !w-6"
                             title={p.Visible === false ? 'Show' : 'Hide'}
                           >
                             {p.Visible === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
@@ -470,7 +471,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                               e.stopPropagation();
                               onRevertPane(key);
                             }}
-                            className="p-0.5 text-[var(--text-2)] hover:text-red-300"
+                            className="ui-row-action ui-row-action-danger !w-6"
                             title="Revert to stock"
                           >
                             <RotateCcw className="w-3 h-3" />
@@ -631,7 +632,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                         e.stopPropagation();
                         handleRemoveGame(g.id);
                       }}
-                      className="text-[var(--text-3)] hover:text-red-400 p-0.5"
+                      className="ui-row-action ui-row-action-danger !w-6"
+                      title="Remove"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -645,15 +647,14 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
         {activeTab === 'json' && (
           <div className="space-y-3">
             {implicitZero.length > 0 && (
-              <div className="p-2 rounded bg-sky-500/10 border border-sky-500/30 text-sky-200 text-[12px] space-y-1">
-                <div className="font-semibold">Axes the injector will set to 0</div>
+              <Note tone="warn" title="Axes the injector will set to 0">
                 {implicitZero.slice(0, 8).map((z) => (
                   <div key={`${z.file}${z.pane}${z.field}`} className="font-mono text-[12px]">
                     {z.pane}.{z.field}.{z.missing.join('/')}
                   </div>
                 ))}
                 {implicitZero.length > 8 && <div>…and {implicitZero.length - 8} more</div>}
-              </div>
+              </Note>
             )}
             <textarea
               value={jsonDraft ?? JSON.stringify(layout, null, 2)}

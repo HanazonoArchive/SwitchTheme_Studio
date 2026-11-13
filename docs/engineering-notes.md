@@ -315,6 +315,35 @@ an older firmware's palette; left as is until a 20.0+ console shot shows otherwi
 and focused card (lower half) weren't part of the issue. The other four packs render pixel-identical
 before and after these changes.
 
+## Game icon size and focus zoom (how the console treats a focused game)
+
+Checked against the console's own RdtBtnIconGame animations (ResidentMenu.szs) and four packs:
+
+- **All game icons are one layout.** RdtBtnIconGame is instantiated once per slot, so a size
+  change applies to every game icon; there's no per-icon size.
+- **Stock, focus doesn't change the size.** `FocusKey` has no keys and `Active` only fades the
+  cursor frame in (`P_InnerCursor` alpha 0 → 255 in 1 frame); `Inactive` fades it out. Pressing
+  plays `DecideKey`/`DecideTouch`, an 8-frame bounce to 94%. There's no console setting for
+  enlarging the focused game.
+- **Themes enlarge it with animations.** They replace `RdtBtnIconGame_Active`/`_Inactive` with
+  versions that add FLPA scale keys on a pane, plus a group (AddGroups) containing that pane:
+  Purple Skies N_Root 1 → 1.8 under a RootPane scale of 0.5, Gengar RootPane 0.47 → 0.75, another
+  pack N_Root 2 → 3–4.
+- **The editor** (Inspector → Game icon size, with a game icon or slot selected) reads those
+  values as "All %" and "Focus %" relative to the console size and writes them back: editing the
+  theme's animations when it has them; otherwise a plain N_Root scale (no zoom) or new
+  Active/Inactive animations started from the console's own files (`nx/bflanJson.ts` reads a
+  BFLAN into the installer's JSON form, so the stock cursor keys stay) with a group
+  `STS_G_Focus` = the stock group's panes + N_Root. Slot spacing (N_Icon_xx) isn't changed.
+
+## Layer view as an exploded stack
+
+Layer view draws the component's layers as a stack of semi-transparent slabs projected at an
+angle (rotate 45°, half height), bottom layer lowest, each slab showing its layer in place, with
+two side faces for thickness. Tiles (thumbnail, name, kind, state) sit in two columns and connect
+to their slab's corner with a line. The tile card and the slab carry the layer's key (the card's
+id is `id#tile`, mapped back on select); clicks only select there (no handles).
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

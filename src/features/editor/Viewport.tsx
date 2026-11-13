@@ -8,7 +8,7 @@ import { STOCK_BG } from '../../lib/theme/stock';
 import { bounds } from '../../lib/render/matrix';
 import { PixiView, type Underlay } from '../canvas/PixiView';
 import { EditorOverlay, type MoveDelta, type SnapSettings, type Tool, type TransformChange } from '../canvas/EditorOverlay';
-import { LINES, MEANING, nodeOutline, unionBox, type Exploded, type Pt } from '../canvas/geometry';
+import { LINES, MEANING, nodeOutline, TILE_SUFFIX, unionBox, type Exploded, type Pt } from '../canvas/geometry';
 
 interface ViewportProps {
   activeScreen: ThemeScreen | null;
@@ -344,21 +344,56 @@ export const Viewport: React.FC<ViewportProps> = ({
           </div>
           {exploded && (
             <div className="absolute left-0 top-0 pointer-events-none" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
-              {exploded.tiles.map((t) => (
-                <div
-                  key={t.id}
-                  className="absolute rounded-md"
-                  style={{ left: t.box.x, top: t.box.y, width: t.box.w, height: t.box.h, border: `${1 / scale}px dashed rgba(255,255,255,0.14)` }}
-                >
+              <svg className="absolute inset-0 overflow-visible" width={w} height={h}>
+                {exploded.tiles.map((t) => {
+                  const on = selectedIds.includes(t.id);
+                  const mx = (t.from[0] + t.to[0]) / 2;
+                  return (
+                    <g key={t.id} opacity={on ? 1 : 0.55}>
+                      <path
+                        d={`M ${t.from[0]} ${t.from[1]} C ${mx} ${t.from[1]}, ${mx} ${t.to[1]}, ${t.to[0]} ${t.to[1]}`}
+                        fill="none"
+                        stroke={on ? MEANING.selected.color : 'rgba(170,190,255,0.7)'}
+                        strokeWidth={(on ? 1.6 : 1) / scale}
+                        strokeDasharray={on ? undefined : `${4 / scale} ${3 / scale}`}
+                      />
+                      <circle cx={t.to[0]} cy={t.to[1]} r={(on ? 3.5 : 2.5) / scale} fill={on ? MEANING.selected.color : 'rgba(170,190,255,0.9)'} />
+                      <circle cx={t.from[0]} cy={t.from[1]} r={2 / scale} fill={on ? MEANING.selected.color : 'rgba(170,190,255,0.9)'} />
+                    </g>
+                  );
+                })}
+              </svg>
+              {exploded.tiles.map((t) => {
+                const on = selectedIds.includes(t.id);
+                const fs = Math.min(12 / scale, t.box.h * 0.3);
+                return (
                   <div
-                    className="absolute left-0 right-0 bottom-0 truncate text-center"
-                    style={{ fontSize: Math.max(9, 11 / scale), lineHeight: 1.3, padding: `0 ${4 / scale}px ${3 / scale}px`, color: selectedIds.includes(t.id) ? MEANING.selected.color : 'rgba(255,255,255,0.7)' }}
+                    key={t.id}
+                    className="absolute rounded-lg"
+                    style={{
+                      left: t.box.x,
+                      top: t.box.y,
+                      width: t.box.w,
+                      height: t.box.h,
+                      border: `${(on ? 1.5 : 1) / scale}px solid ${on ? MEANING.selected.color : 'rgba(255,255,255,0.12)'}`,
+                      boxShadow: on ? `0 0 0 ${3 / scale}px rgba(47,124,246,0.25)` : undefined,
+                    }}
                   >
-                    {t.name}
-                    {t.note && <span style={{ color: t.note === 'hidden in theme' ? MEANING.hiddenInTheme.color : MEANING.locked.color }}> · {t.note}</span>}
+                    <div
+                      className="absolute flex flex-col justify-center min-w-0"
+                      style={{ left: t.thumb.x - t.box.x + t.thumb.w + 8, right: 8, top: 0, bottom: 0, fontSize: fs, lineHeight: 1.25 }}
+                    >
+                      <div className="whitespace-nowrap overflow-hidden text-ellipsis font-medium" style={{ color: on ? '#fff' : 'rgba(255,255,255,0.88)' }} title={t.name}>
+                        {t.name}
+                      </div>
+                      <div className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ fontSize: fs * 0.85, color: 'rgba(255,255,255,0.5)' }}>
+                        {t.kind}
+                        {t.note && <span style={{ color: t.note === 'hidden in theme' ? MEANING.hiddenInTheme.color : '#a1a1aa' }}> · {t.note}</span>}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {shown && (
@@ -374,8 +409,9 @@ export const Viewport: React.FC<ViewportProps> = ({
                 changedKeys={changedKeys}
                 showAllOutlines={mockState.wireframeMode}
                 snap={exploded ? { ...snap, guides: false } : snap}
-                onSelect={onSelect}
+                onSelect={exploded ? (n, how) => onSelect(n && n.id.endsWith(TILE_SUFFIX) ? (shown.flat.find((x) => x.id === n.id.slice(0, -TILE_SUFFIX.length)) ?? null) : n, how) : onSelect}
                 onSelectMany={onSelectMany}
+                selectOnly={!!exploded}
                 onMove={onMovePanes}
                 onResize={onResizePane}
                 onContextMenu={onContextMenu}
@@ -411,15 +447,15 @@ export const Viewport: React.FC<ViewportProps> = ({
         )}
 
         {exploded && (
-          <div className="absolute z-20 left-1/2 -translate-x-1/2 flex items-center gap-2 h-9 pl-1 pr-3 rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[12px]" style={{ top: inset + 8 }}>
+          <div className="absolute z-20 left-1/2 -translate-x-1/2 flex items-center gap-2 h-9 pl-1 pr-3 max-w-[calc(100%-48px)] whitespace-nowrap rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[12px]" style={{ top: inset + 8 }}>
             <button className="ui-btn !h-7" onClick={onExitExploded} title="Back to the screen (Esc)">
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
             <span className="font-medium" style={{ color: MEANING.component.color }}>
               Layer view
             </span>
-            <span className="text-[var(--text-2)] truncate max-w-[340px]">
-              {exploded.title} · {exploded.tiles.length} layers. Click one to select and edit it.
+            <span className="text-[var(--text-2)] whitespace-nowrap truncate min-w-0 max-w-[420px]" title={`${exploded.title} · ${exploded.tiles.length} layers`}>
+              {exploded.title} · {exploded.tiles.length} layers · click a layer or its tile to select it
             </span>
           </div>
         )}

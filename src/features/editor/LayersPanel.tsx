@@ -189,7 +189,7 @@ export const LayersPanel: React.FC<Props> = ({ scene, selectedIds, hiddenIds, lo
           {flatList && <span className="text-[10px] text-[var(--text-3)] truncate max-w-[80px] mr-1">{fileName(n)}</span>}
           {comp && (
             <button
-              className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-3)] hover:text-[var(--text)] opacity-0 group-hover:opacity-100"
+              className="ui-row-action !w-6 opacity-0 group-hover:opacity-100"
               title="Layer view: see every layer of this component side by side (highlight, pressed state...) and pick one"
               onClick={(e) => {
                 e.stopPropagation();
@@ -201,7 +201,7 @@ export const LayersPanel: React.FC<Props> = ({ scene, selectedIds, hiddenIds, lo
             </button>
           )}
           <button
-            className={`w-6 h-6 flex items-center justify-center rounded text-[var(--text-3)] hover:text-[var(--text)] ${ownLocked ? '' : inhLocked ? 'opacity-40' : 'opacity-0 group-hover:opacity-100'}`}
+            className={`ui-row-action !w-6 ${ownLocked ? '' : inhLocked ? 'opacity-40' : 'opacity-0 group-hover:opacity-100'}`}
             title={ownLocked ? 'Unlock (editor only)' : inhLocked ? 'Locked with its component' : 'Lock: clicks go through this layer (editor only)'}
             onClick={(e) => {
               e.stopPropagation();
@@ -212,7 +212,7 @@ export const LayersPanel: React.FC<Props> = ({ scene, selectedIds, hiddenIds, lo
             {ownLocked || inhLocked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
           </button>
           <button
-            className={`w-6 h-6 flex items-center justify-center rounded text-[var(--text-3)] hover:text-[var(--text)] ${ownHidden ? '' : inhHidden ? 'opacity-40' : 'opacity-0 group-hover:opacity-100'}`}
+            className={`ui-row-action !w-6 ${ownHidden ? '' : inhHidden ? 'opacity-40' : 'opacity-0 group-hover:opacity-100'}`}
             title={ownHidden ? 'Show in editor' : inhHidden ? 'Hidden with its component' : 'Hide in editor only (not in the theme)'}
             onClick={(e) => {
               e.stopPropagation();

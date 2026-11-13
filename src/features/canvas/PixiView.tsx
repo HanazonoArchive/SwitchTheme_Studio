@@ -4,6 +4,7 @@ import type { Border, Content, Scene, SceneNode } from '../../lib/render/scene';
 import type { PaneVisual } from '../../lib/layout/textures';
 import { fontVersion } from '../../lib/render/mockDraw';
 import { cornerRadii } from '../../lib/render/corners';
+import { setSnapshotApp } from './snapshot';
 
 /**
  * Draws a scene with PixiJS (WebGL), the way the console composes its layout: textured quads
@@ -276,12 +277,14 @@ export const PixiView: React.FC<Props> = ({ scene, underlay, background, resolut
           return;
         }
         appRef.current = app;
+        setSnapshotApp(app);
         host.current?.appendChild(app.canvas);
         setReady(true);
       });
     return () => {
       cancelled = true;
       if (appRef.current) {
+        setSnapshotApp(null, appRef.current);
         appRef.current.destroy(true, { children: true });
         appRef.current = null;
       }

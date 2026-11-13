@@ -18,6 +18,8 @@ interface ViewportProps {
   /** A component's layers side by side (Layer view), drawn instead of the screen. */
   exploded: Exploded | null;
   onExitExploded: () => void;
+  /** Shown under the Layer view bar ("N_Foo isn't a component"). */
+  explodeNotice?: string | null;
   mode: 'edit' | 'preview';
   mockState: MockSystemState;
   selectedIds: string[];
@@ -154,6 +156,7 @@ export const Viewport: React.FC<ViewportProps> = ({
   scene,
   exploded,
   onExitExploded,
+  explodeNotice,
   mode,
   mockState,
   selectedIds,
@@ -257,7 +260,7 @@ export const Viewport: React.FC<ViewportProps> = ({
   }, [hasScreen]);
 
   const background = React.useMemo(
-    () => (exploded ? { color: '#141416' } : wallpaperUrl ? { url: wallpaperUrl } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }),
+    () => (exploded ? { color: 'rgba(0,0,0,0)' } : wallpaperUrl ? { url: wallpaperUrl } : { color: mockState.isDarkTheme ? STOCK_BG.dark : STOCK_BG.light }),
     [wallpaperUrl, mockState.isDarkTheme, exploded],
   );
 
@@ -336,7 +339,8 @@ export const Viewport: React.FC<ViewportProps> = ({
             height: h * scale,
             left,
             top,
-            boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 30px rgba(0,0,0,0.45)',
+            // Layer view floats on the canvas itself, without the screen's frame.
+            boxShadow: exploded ? undefined : '0 0 0 1px rgba(255,255,255,0.06), 0 8px 30px rgba(0,0,0,0.45)',
           }}
         >
           <div className="absolute left-0 top-0 overflow-hidden" style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
@@ -447,16 +451,33 @@ export const Viewport: React.FC<ViewportProps> = ({
         )}
 
         {exploded && (
-          <div className="absolute z-20 left-1/2 -translate-x-1/2 flex items-center gap-2 h-9 pl-1 pr-3 max-w-[calc(100%-48px)] whitespace-nowrap rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[12px]" style={{ top: inset + 8 }}>
-            <button className="ui-btn !h-7" onClick={onExitExploded} title="Back to the screen (Esc)">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
-            <span className="font-medium" style={{ color: MEANING.component.color }}>
-              Layer view
-            </span>
-            <span className="text-[var(--text-2)] whitespace-nowrap truncate min-w-0 max-w-[420px]" title={`${exploded.title} · ${exploded.tiles.length} layers`}>
-              {exploded.title} · {exploded.tiles.length} layers · click a layer or its tile to select it
-            </span>
+          <div className="absolute z-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 max-w-[calc(100%-48px)]" style={{ top: inset + 8 }}>
+            <div className="flex items-center gap-2 h-8 pl-1 pr-3 max-w-full whitespace-nowrap rounded-lg bg-[var(--panel)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.35)] text-[12px]">
+              <button
+                className="h-6 pl-1.5 pr-2 rounded-md flex items-center gap-1 text-[12px] text-[var(--text-2)] hover:text-[var(--text)] hover:bg-[var(--hover)] shrink-0"
+                onClick={onExitExploded}
+                title="Back to the screen (Esc)"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <span className="w-px h-4 bg-[var(--border)] shrink-0" />
+              <span className="font-medium shrink-0" style={{ color: MEANING.component.color }}>
+                Layer view
+              </span>
+              <span className="text-[var(--text-2)] truncate min-w-0" title={`${exploded.title} · ${exploded.tiles.length} layers`}>
+                {exploded.title} · {exploded.tiles.length} {exploded.tiles.length === 1 ? 'layer' : 'layers'} · pick a component in Layers to open it here
+              </span>
+            </div>
+            {exploded.tiles.length === 0 && (
+              <div role="status" className="h-7 px-3 flex items-center rounded-md bg-[var(--panel)] border border-[var(--border)] text-[12px] text-[var(--text-2)] whitespace-nowrap" style={{ borderLeft: '3px solid var(--info)' }}>
+                Nothing to take apart: this component draws no layers of its own (only other components, or nothing on screen).
+              </div>
+            )}
+            {explodeNotice && (
+              <div role="status" className="h-7 px-3 flex items-center rounded-md bg-[var(--panel)] border border-[var(--border)] text-[12px] text-[var(--text-2)] whitespace-nowrap" style={{ borderLeft: '3px solid var(--warn)' }}>
+                {explodeNotice}
+              </div>
+            )}
           </div>
         )}
       </div>

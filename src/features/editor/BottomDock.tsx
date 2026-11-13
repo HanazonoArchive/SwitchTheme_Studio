@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, History, Image as ImageIcon, RotateCcw, Type, Upload } from 'lucide-react';
 import type { ThemeScreen } from '../../types/theme';
 import { CustomIcons } from './CustomIcons';
+import type { AppletIconSlot } from '../../lib/layout/appletIcons';
+import { Splitter } from '../../components/Splitter';
 import { DEFAULT_FONT, setPreviewFontFamily } from '../../lib/render/mockDraw';
 
 /**
@@ -22,6 +24,12 @@ interface Props {
   onChangeExtraFiles: (files: ThemeScreen['extraFiles']) => void;
   /** A preview font was loaded or removed (text needs laying out again). */
   onFontChange: () => void;
+  /** Open height (drag the divider above the dock). */
+  height: number;
+  onHeight: (h: number) => void;
+  onResetHeight: () => void;
+  /** Picture of a custom-icon slot's default icon from the preview. */
+  defaultIcon?: (slot: AppletIconSlot) => string | null | undefined;
 }
 
 const ago = (t: number, now: number) => {
@@ -34,7 +42,7 @@ const ago = (t: number, now: number) => {
 
 const PREVIEW_FAMILY = 'STS Preview Font';
 
-export const BottomDock: React.FC<Props> = ({ steps, current, onJump, screen, onChangeExtraFiles, onFontChange }) => {
+export const BottomDock: React.FC<Props> = ({ steps, current, onJump, screen, onChangeExtraFiles, onFontChange, height, onHeight, onResetHeight, defaultIcon }) => {
   const [tab, setTab] = useState<'history' | 'assets'>('history');
   const [open, setOpen] = useState(() => {
     try {
@@ -87,7 +95,9 @@ export const BottomDock: React.FC<Props> = ({ steps, current, onJump, screen, on
   };
 
   return (
-    <div className="shrink-0 border-t border-[var(--border)] bg-[var(--panel)] flex flex-col" style={{ height: open ? 196 : 32 }}>
+    <>
+    {open && <Splitter axis="y" size={height} onSize={onHeight} onReset={onResetHeight} invert label="History and assets height" />}
+    <div className={`shrink-0 bg-[var(--panel)] flex flex-col ${open ? '' : 'border-t border-[var(--border)]'}`} style={{ height: open ? height : 32 }}>
       <div className="h-8 flex items-center gap-1 px-2 shrink-0 border-b border-[var(--border)]">
         {(
           [
@@ -142,7 +152,7 @@ export const BottomDock: React.FC<Props> = ({ steps, current, onJump, screen, on
       {open && tab === 'assets' && (
         <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4 p-3 overflow-hidden">
           <div className="min-h-0 overflow-y-auto pr-1">
-            <CustomIcons screen={screen} onChange={onChangeExtraFiles} />
+            <CustomIcons screen={screen} onChange={onChangeExtraFiles} defaultIcon={defaultIcon} />
             {!['home', 'lock'].includes(screen.target) && <div className="text-[12px] text-[var(--text-3)]">This screen has no icons a theme can replace. Custom icons are on the Home menu and the lock screen.</div>}
           </div>
           <div className="min-h-0 overflow-y-auto space-y-2">
@@ -174,5 +184,6 @@ export const BottomDock: React.FC<Props> = ({ steps, current, onJump, screen, on
         </div>
       )}
     </div>
+    </>
   );
 };

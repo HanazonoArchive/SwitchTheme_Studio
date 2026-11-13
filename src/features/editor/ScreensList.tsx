@@ -13,8 +13,8 @@ export const ScreensList: React.FC<{
   const [adding, setAdding] = useState(false);
   const missing = TARGETS.filter((t) => !screens.some((s) => s.target === t.target));
   return (
-    <div className="border-b border-[var(--border)] shrink-0">
-      <div className="h-9 px-3 flex items-center justify-between">
+    <div className="h-full flex flex-col min-h-0">
+      <div className="h-9 px-3 flex items-center justify-between shrink-0">
         <span className="text-[12px] font-semibold text-[var(--text)]">Screens</span>
         {missing.length > 0 && (
           <div className="relative">
@@ -41,7 +41,7 @@ export const ScreensList: React.FC<{
           </div>
         )}
       </div>
-      <div className="pb-1.5">
+      <div className="pb-1.5 flex-1 min-h-0 overflow-y-auto">
         {screens.map((s) => {
           const edits = (s.layout.Files ?? []).reduce((n, f) => n + (f.Patches?.length ?? 0), 0);
           const active = s.id === activeScreenId;

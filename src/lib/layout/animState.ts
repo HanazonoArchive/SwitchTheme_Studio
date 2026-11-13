@@ -187,13 +187,18 @@ export function applyRestingState(
   for (const step of restingAnimations(sys, layoutFile, state)) {
     const anim = getAnimation(sys, layout, step.name);
     if (!anim) continue;
+    // An animation rests at its frame count even when keys go further (Gengar's Inactive is 6
+    // frames with a key at 12: unfocused icons stop 60 px up, as on its console screenshot).
+    // User_xx are the exception: qlaunch seeks them to the frame for the number of players, the
+    // last key (the player's picture and the moved "Playing" pill, as on console screenshots).
+    const stopAt = /_User_\d+\.bflan$/.test(step.name) ? undefined : anim.frameSize;
     for (const entry of anim.entries) {
       if (entry.target === 0) {
         const pane = index.get(entry.name);
         if (!pane) continue;
         for (const tag of entry.tags) {
           for (const c of tag.curves) {
-            const v = curveValue(c, step.at);
+            const v = curveValue(c, step.at, stopAt, tag.type === 'FLTP');
             if (v === undefined) continue;
             if (tag.type === 'FLVI' && c.target === 0) pane.visible = v >= 0.5;
             else if (tag.type === 'FLVC' && c.target === 16) {
@@ -223,7 +228,7 @@ export function applyRestingState(
             const o = materials.get(entry.name) ?? {};
             const srt = [...(o.srt ?? [])] as NonNullable<MaterialOverride['srt']>;
             for (const c of tag.curves) {
-              const v = curveValue(c, step.at);
+              const v = curveValue(c, step.at, stopAt);
               if (v !== undefined && c.target < 5) srt[c.target] = v;
             }
             materials.set(entry.name, { ...o, srt });
@@ -232,7 +237,7 @@ export function applyRestingState(
           if (tag.type !== 'FLMC') continue;
           const o = materials.get(entry.name) ?? {};
           for (const c of tag.curves) {
-            const v = curveValue(c, step.at);
+            const v = curveValue(c, step.at, stopAt);
             if (v === undefined) continue;
             const which = c.target < 4 ? 'black' : 'white';
             const arr = [...(o[which] ?? [])] as [number?, number?, number?, number?];

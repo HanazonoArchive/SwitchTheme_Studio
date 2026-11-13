@@ -47,6 +47,8 @@ export interface ThemeScreen {
   extraFiles: { name: string; blob: Blob }[];
   /** Original info.json, kept for fields we don't edit. */
   info: Record<string, unknown>;
+  /** Editor-only: the layout preset this screen started from and its options (never exported). */
+  preset?: { id: string; choices: Record<string, boolean | string | undefined> };
 }
 
 export interface ThemeProject {

@@ -1,0 +1,5 @@
+The layout presets in this folder come from ThemezerNX/Layouts
+https://github.com/ThemezerNX/Layouts (commit 1fc18168988915d5f0ce97df9046e60d1f2c2a3d)
+Licensed under the Mozilla Public License 2.0 (LICENSE-themezer-layouts.txt).
+Each layout belongs to its author (AuthorName in its layout.json). The files are repackaged
+unchanged except for removing Themezer's internal "uuid" fields.

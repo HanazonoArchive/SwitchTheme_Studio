@@ -154,6 +154,14 @@ The start page offers:
 - **Recent**: reopen themes saved in this browser.
 - **Examples**: Purple Skies (image theme) and Vertical OEM (layout-only theme).
 
+**Layout presets.** In the **Layout** tab, *Start from a layout* lists the community layouts
+published on Themezer for that screen (57 in all: 34 for the Home menu, plus lock screen, All
+Software, Settings, News, User page and Player select). Pick one to apply it, then use its options
+(toggles and choices, as on Themezer) and keep editing from there. **Stock** goes back to the
+console's layout, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes any of it. Every preset variant was
+checked with the injector's own tool: each one validates and applies to a 23.0.1 dump without
+errors. Refresh them with `node scripts/import-themezer-layouts.mjs <checkout of ThemezerNX/Layouts>`.
+
 ### 2. Edit
 
 | Action | How |
@@ -230,7 +238,10 @@ Continue layout with the status bar).
 ### 4. Export
 
 **Export .nxtheme** downloads the current screen as an `.nxtheme`, or every screen as a theme pack
-(`.zip`). Copy the files to `sd:/themes/` and install them with NXThemes Installer.
+(`.zip` of `.nxtheme` files: unzip it and copy the `.nxtheme` files to `sd:/themes/`). Install them
+with NXThemes Installer. An `.nxtheme` is the installer's own format (a zip with `info.json`,
+`layout.json`, `common.json`, the image and icons, format version 17); themes opened and exported
+again install byte-for-byte the same as the originals (see the engineering notes).
 
 **Theme types**
 
@@ -375,6 +386,8 @@ stay in your browser and are never exported. Don't share your console's `.szs` o
 
 - [exelix11/SwitchThemeInjector](https://github.com/exelix11/SwitchThemeInjector): the theme format,
   installer behaviour and layout documentation this project follows.
+- Layout presets from [ThemezerNX/Layouts](https://github.com/ThemezerNX/Layouts) (MPL-2.0), by
+  their authors (each preset shows its author); see `public/presets/NOTICE.txt`.
 - Example themes from [Themezer](https://themezer.net/): *Purple Skies* by Hsushi and *Vertical OEM*
   by sodasoba, with layouts by FairTech and others.
 - Nintendo Switch is a trademark of Nintendo. Game titles and cover art shown in the preview belong

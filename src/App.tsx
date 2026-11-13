@@ -18,6 +18,8 @@ import { blockedBy, changedKeysOf, explodeScene, MEANING, nodeNotes, parentMap, 
 import { isComponent } from './lib/render/scene';
 import { marksOf, markKey, setMark, TAG_COLORS, type TagColor } from './lib/editor/marks';
 import { checkCompat } from './lib/compat';
+import { EXPECTED_FILES, isConsoleDumpZip, readConsoleDump, savedConsoleVersion, saveConsoleVersion } from './lib/layout/consoleDump';
+import { ConsoleFilesDialog } from './features/editor/ConsoleFilesDialog';
 import { snapshotRegion } from './features/canvas/snapshot';
 import { bounds, quad } from './lib/render/matrix';
 import type { AppletIconSlot } from './lib/layout/appletIcons';
@@ -118,6 +120,12 @@ export function App() {
   }, [explodeNotice]);
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null);
   const help = useHelp();
+  // Console files (the user's own .szs dump).
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [consoleBusy, setConsoleBusy] = useState(false);
+  const [consoleError, setConsoleError] = useState<string | null>(null);
+  const [consoleReport, setConsoleReport] = useState<string | null>(null);
+  const [consoleVersion, setConsoleVersion] = useState<string | undefined>(() => savedConsoleVersion());
   // Panel sizes (draggable dividers, remembered in this browser).
   const [leftW, setLeftW, resetLeftW] = usePanelSize('left', 264, 200, 520);
   const [rightW, setRightW, resetRightW] = usePanelSize('right', 288, 220, 600);
@@ -136,7 +144,12 @@ export function App() {
   // Built-in layouts, plus the user's console files remembered between sessions.
   useEffect(() => {
     loadStockLayouts().then(setStockLayouts);
-    loadSavedSystemLayouts().then((saved) => setSystemLayouts((prev) => ({ ...saved, ...prev })));
+    loadSavedSystemLayouts().then((saved) => {
+      // The dump's firmware (ver.cfg) is kept separately from the files.
+      const v = savedConsoleVersion();
+      if (v) Object.values(saved).forEach((sys) => sys && (sys.consoleVersion = v));
+      setSystemLayouts((prev) => ({ ...saved, ...prev }));
+    });
   }, []);
 
   // Save the theme in this browser as you work (the start page lists recent themes).
@@ -690,28 +703,71 @@ export function App() {
 
   /* ------------------------------ system layouts ------------------------------ */
 
+  const loadSzsBytes = (name: string, bytes: Uint8Array, version?: string) => {
+    const sys = parseSystemSzs(name, bytes);
+    if (version) sys.consoleVersion = version;
+    const slot = isCommonSzs(name) ? 'common' : sys.target;
+    setSystemLayouts((prev) => ({ ...prev, [slot]: sys }));
+    saveSystemSzs(slot, name, bytes);
+    return slot;
+  };
+
   const handleLoadSystemSzs = async (files: File[]) => {
     setSystemError(null);
     for (const f of files) {
       try {
-        const bytes = new Uint8Array(await f.arrayBuffer());
-        const sys = parseSystemSzs(f.name, bytes);
-        const slot = isCommonSzs(f.name) ? 'common' : sys.target;
-        setSystemLayouts((prev) => ({ ...prev, [slot]: sys }));
-        saveSystemSzs(slot, f.name, bytes);
+        loadSzsBytes(f.name, new Uint8Array(await f.arrayBuffer()), consoleVersion);
       } catch (e) {
         setSystemError((e as Error).message);
       }
     }
   };
 
-  const handleForgetSystemSzs = (target: ScreenTarget) => {
+  /** The console dump (zip, folder or .szs files) from the Console files dialog or a drop. */
+  const handleConsoleFiles = async (files: File[]) => {
+    setConsoleBusy(true);
+    setConsoleError(null);
+    setConsoleReport(null);
+    try {
+      const dump = await readConsoleDump(files);
+      if (!dump.szs.length) throw new Error(`No console layout files in ${files.map((f) => f.name).join(', ')}. Expected the "extracted" folder from NXThemes Installer (ResidentMenu.szs, Entrance.szs, … MyPage.szs, Psl.szs).`);
+      const version = dump.version ?? consoleVersion;
+      const failed: string[] = [];
+      let ok = 0;
+      for (const f of dump.szs) {
+        try {
+          loadSzsBytes(f.name, f.bytes, version);
+          ok++;
+        } catch (e) {
+          failed.push(`${f.name}: ${(e as Error).message}`);
+        }
+      }
+      if (dump.version) {
+        setConsoleVersion(dump.version);
+        saveConsoleVersion(dump.version);
+      }
+      if (failed.length) setConsoleError(failed.join(' · '));
+      setConsoleReport(`${ok} of ${EXPECTED_FILES.length} files${version ? ` from firmware ${version}` : ''}. ${ok < EXPECTED_FILES.length ? 'Screens without a file keep the built-in preset.' : 'Every screen now uses your console.'}`);
+    } catch (e) {
+      setConsoleError((e as Error).message);
+    } finally {
+      setConsoleBusy(false);
+    }
+  };
+
+  const handleForgetSystemSzs = (target: ScreenTarget | 'common' | 'all') => {
+    const slots = target === 'all' ? EXPECTED_FILES.map((f) => f.slot) : [target];
     setSystemLayouts((prev) => {
       const next = { ...prev };
-      delete next[target];
+      for (const s of slots) delete next[s];
       return next;
     });
-    removeSystemSzs(target);
+    slots.forEach((s) => removeSystemSzs(s));
+    if (target === 'all') {
+      setConsoleVersion(undefined);
+      saveConsoleVersion(undefined);
+      setConsoleReport(null);
+    }
   };
 
   const handleAddScreen = (target: ScreenTarget) => {
@@ -743,6 +799,8 @@ export function App() {
           setExplodeId(null);
         }}
         onHelp={help.open}
+        onConsoleFiles={() => setConsoleOpen(true)}
+        consoleStatus={{ loaded: EXPECTED_FILES.filter((f) => consoleLayouts[f.slot]).length, total: EXPECTED_FILES.length, version: consoleVersion }}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onRenameProject={(name, author) => history.set((p) => (p ? { ...p, name, author } : p), { label: `Rename to ${name}` })}
         canUndo={history.canUndo}
@@ -788,6 +846,7 @@ export function App() {
               onRevertPane={handleRevertPane}
               onLoadSystemSzs={handleLoadSystemSzs}
               onForgetSystemSzs={handleForgetSystemSzs}
+              onOpenConsoleFiles={() => setConsoleOpen(true)}
               onCommitHistory={history.commit}
             />
           </aside>
@@ -819,8 +878,9 @@ export function App() {
           onUpdateMockState={(u) => setMockState((p) => ({ ...p, ...u }))}
           onDropFile={(file) => {
             const n = file.name.toLowerCase();
-            if (n.endsWith('.szs')) handleLoadSystemSzs([file]);
-            else if (n.endsWith('.nxtheme') || n.endsWith('.zip')) openThemeFiles([file]);
+            if (n.endsWith('.szs')) handleConsoleFiles([file]);
+            else if (n.endsWith('.zip')) isConsoleDumpZip(file).then((dump) => (dump ? (setConsoleOpen(true), handleConsoleFiles([file])) : openThemeFiles([file])));
+            else if (n.endsWith('.nxtheme')) openThemeFiles([file]);
             else handleReplaceWallpaper(file);
           }}
         />
@@ -890,6 +950,19 @@ export function App() {
 
 
 
+      {consoleOpen && (
+        <ConsoleFilesDialog
+          consoleLayouts={consoleLayouts}
+          stockLayouts={stockLayouts}
+          version={consoleVersion}
+          busy={consoleBusy}
+          error={consoleError}
+          report={consoleReport}
+          onFiles={handleConsoleFiles}
+          onForget={handleForgetSystemSzs}
+          onClose={() => setConsoleOpen(false)}
+        />
+      )}
       {menu && <ContextMenu at={menu.at} items={menu.items} onClose={() => setMenu(null)} />}
       {help.tab && <HelpDialog tab={help.tab} onTab={help.open} onClose={help.close} />}
       {compat.length > 0 && (

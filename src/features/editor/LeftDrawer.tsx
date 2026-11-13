@@ -41,6 +41,7 @@ interface LeftDrawerProps {
   onRevertPane: (key: string, field?: keyof PanePatch) => void;
   onLoadSystemSzs: (files: File[]) => void;
   onForgetSystemSzs: (target: ScreenTarget) => void;
+  onOpenConsoleFiles: () => void;
   onCommitHistory: () => void;
 }
 
@@ -86,6 +87,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
   onRevertPane,
   onLoadSystemSzs,
   onForgetSystemSzs,
+  onOpenConsoleFiles,
   onCommitHistory,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,8 +330,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                     Your console's {info.szs} ({system?.layouts.size} layouts, firmware {system?.firmwareHint}). Textures are exact.
                   </div>
                   <div className="flex gap-3">
-                    <button onClick={() => szsInputRef.current?.click()} className="text-[12px] text-[var(--text-2)] hover:text-[var(--text)]">
-                      Replace
+                    <button onClick={onOpenConsoleFiles} className="text-[12px] text-[var(--text-2)] hover:text-[var(--text)]">
+                      Console files…
                     </button>
                     <button onClick={() => onForgetSystemSzs(activeScreen.target)} className="text-[12px] text-[var(--text-2)] hover:text-[var(--danger)]">
                       Use built-in
@@ -342,10 +344,10 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                     {system ? <>Built-in stock layout (firmware {system.consoleVersion ?? system.firmwareHint}). Positions and sizes are the console's; icons are stand-ins.</> : <>Loading the built-in layout…</>}
                   </p>
                   <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
-                    For the console's own icons and textures, load your files: NXThemes Installer → Extract home menu, then <span className="font-mono">sd:/themes/systemData/extracted/…/lyt/*.szs</span>. They stay in this browser.
+                    For your firmware's exact layouts and the console's own icons and textures, load the zipped <span className="font-mono">extracted</span> folder from NXThemes Installer (Extract home menu). It stays in this browser.
                   </p>
-                  <button onClick={() => szsInputRef.current?.click()} className="ui-btn w-full justify-center">
-                    Load {info.szs} (optional)
+                  <button onClick={onOpenConsoleFiles} className="ui-btn w-full justify-center">
+                    Load console files…
                   </button>
                 </>
               )}

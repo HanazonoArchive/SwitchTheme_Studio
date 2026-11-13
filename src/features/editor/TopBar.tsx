@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { BookOpen, Bug, Download, FolderGit2, ExternalLink, FolderOpen, Keyboard, LifeBuoy, MoreHorizontal, Redo2, Shapes, ShieldAlert, Undo2, X } from 'lucide-react';
+import { BookOpen, Bug, Cpu, Download, FolderGit2, ExternalLink, FolderOpen, Keyboard, LifeBuoy, MoreHorizontal, Redo2, Shapes, ShieldAlert, Undo2, X } from 'lucide-react';
 import type { ThemeProject } from '../../types/theme';
 import { ContextMenu } from './ContextMenu';
 import { INJECTOR_URL, ISSUES_URL, REPO_URL, type HelpTab } from './help';
@@ -17,11 +17,14 @@ interface TopBarProps {
   onUndo: () => void;
   onRedo: () => void;
   onHelp: (tab: HelpTab) => void;
+  onConsoleFiles: () => void;
+  /** How many of the console's layout files are loaded. */
+  consoleStatus: { loaded: number; total: number; version?: string };
 }
 
 const open = (url: string) => window.open(url, '_blank', 'noopener,noreferrer');
 
-export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onOpenFiles, onCloseProject, onOpenExportModal, onRenameProject, canUndo, canRedo, onUndo, onRedo, onHelp }) => {
+export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onOpenFiles, onCloseProject, onOpenExportModal, onRenameProject, canUndo, canRedo, onUndo, onRedo, onHelp, onConsoleFiles, consoleStatus }) => {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -94,6 +97,15 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
             Export .nxtheme
           </button>
         )}
+        <button
+          className="ui-btn"
+          onClick={onConsoleFiles}
+          title={consoleStatus.loaded ? `${consoleStatus.loaded} of ${consoleStatus.total} layout files from your console${consoleStatus.version ? ` (firmware ${consoleStatus.version})` : ''}` : 'Using the built-in presets. Load your console\'s files for an exact preview.'}
+        >
+          <Cpu className="w-3.5 h-3.5" style={{ color: consoleStatus.loaded === consoleStatus.total ? 'var(--ok)' : consoleStatus.loaded ? 'var(--warn)' : undefined }} />
+          Console files
+          <span className="text-[11px] text-[var(--text-3)] tabular-nums">{consoleStatus.loaded ? `${consoleStatus.loaded}/${consoleStatus.total}` : 'preset'}</span>
+        </button>
         <button className={`ui-icon-btn ${menu ? 'ui-on' : ''}`} title="Help, links and disclaimer" onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           setMenu(menu ? null : { x: r.right - 240, y: r.bottom + 4 });

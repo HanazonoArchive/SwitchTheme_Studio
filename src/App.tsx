@@ -18,6 +18,11 @@ import { blockedBy, changedKeysOf, explodeScene, MEANING, nodeNotes, parentMap, 
 import { isComponent } from './lib/render/scene';
 import { marksOf, markKey, setMark, TAG_COLORS, type TagColor } from './lib/editor/marks';
 import { checkCompat } from './lib/compat';
+import { snapshotRegion } from './features/canvas/snapshot';
+import { bounds, quad } from './lib/render/matrix';
+import type { AppletIconSlot } from './lib/layout/appletIcons';
+import { Splitter } from './components/Splitter';
+import { usePanelSize } from './components/usePanelSize';
 import { AlertTriangle, ArrowDownToLine, ArrowUpToLine, CornerLeftUp, CornerRightDown, Eye, EyeOff, LayoutGrid, Lock, LockOpen, RotateCcw, Star, X } from 'lucide-react';
 import { buildScene, buildSource, type SceneNode } from './lib/render/scene';
 import { StartPage } from './features/project/StartPage';
@@ -105,8 +110,20 @@ export function App() {
   const [extraIds, setExtraIds] = useState<string[]>([]);
   // Layer view: a component's layers laid out side by side.
   const [explodeId, setExplodeId] = useState<string | null>(null);
+  const [explodeNotice, setExplodeNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!explodeNotice) return;
+    const t = setTimeout(() => setExplodeNotice(null), 3500);
+    return () => clearTimeout(t);
+  }, [explodeNotice]);
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null);
   const help = useHelp();
+  // Panel sizes (draggable dividers, remembered in this browser).
+  const [leftW, setLeftW, resetLeftW] = usePanelSize('left', 264, 200, 520);
+  const [rightW, setRightW, resetRightW] = usePanelSize('right', 288, 220, 600);
+  const [screensH, setScreensH, resetScreensH] = usePanelSize('screens', 150, 72, 480);
+  const [layersH, setLayersH, resetLayersH] = usePanelSize('layers', 380, 120, 1400);
+  const [dockH, setDockH, resetDockH] = usePanelSize('dock', 196, 110, 600);
   const [compat, setCompat] = useState(() => checkCompat());
   // Bumped when the preview font changes (text is laid out again).
   const [fontTick, setFontTick] = useState(0);
@@ -258,6 +275,19 @@ export function App() {
     const n = explodeId ? nodeById.get(explodeId) : undefined;
     return scene && n ? explodeScene(scene, n, realParent(parents, n)?.file) : null;
   }, [scene, explodeId, nodeById, parents]);
+  // The console's icon in a custom-icon slot, as the preview draws it (Assets tab).
+  const defaultIcon = useCallback(
+    (slot: AppletIconSlot): string | null | undefined => {
+      // Layer view draws something else: keep the pictures taken before.
+      if (!scene || explodeId) return undefined;
+      const n = scene.flat.find((x) => x.key === `${slot.file}::${slot.pane}`);
+      if (!n || n.hidden || n.opacity < 0.05) return null;
+      const b = bounds(quad(n.world, n.rect));
+      if (b.x + b.w < 0 || b.y + b.h < 0 || b.x > scene.width || b.y > scene.height || b.w < 2) return null;
+      return snapshotRegion(b.x - 2, b.y - 2, b.w + 4, b.h + 4);
+    },
+    [scene, explodeId],
+  );
   const primaryNode = activeSelectedId ? nodeById.get(activeSelectedId) : undefined;
   const notes = useMemo(() => (primaryNode ? nodeNotes(primaryNode, realParent(parents, primaryNode)) : []), [primaryNode, parents]);
   const toggleIn = (set: ReadonlySet<string>, id: string) => {
@@ -725,7 +755,8 @@ export function App() {
         {!project && <StartPage onOpen={openProject} />}
 
         {project && activeScreen && (
-          <aside className="w-[264px] shrink-0 flex flex-col bg-[var(--panel)] border-r border-[var(--border)] min-h-0">
+          <aside className="shrink-0 flex flex-col bg-[var(--panel)] min-h-0" style={{ width: leftW }}>
+            <div className="shrink-0 min-h-0" style={{ height: screensH }}>
             <ScreensList
               screens={project.screens}
               activeScreenId={activeScreen.id}
@@ -736,6 +767,8 @@ export function App() {
               }}
               onAddScreen={handleAddScreen}
             />
+            </div>
+            <Splitter axis="y" size={screensH} onSize={setScreensH} onReset={resetScreensH} label="Screens height" />
             <LeftDrawer
               activeTab={activeRailTab}
               onSelectTab={setActiveRailTab}
@@ -759,6 +792,7 @@ export function App() {
             />
           </aside>
         )}
+        {project && activeScreen && <Splitter axis="x" size={leftW} onSize={setLeftW} onReset={resetLeftW} label="Left panel width" />}
 
         {project && activeScreen && (
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -768,6 +802,7 @@ export function App() {
           underlay={underlay}
           exploded={exploded}
           onExitExploded={() => setExplodeId(null)}
+          explodeNotice={explodeNotice}
           mode={mode}
           mockState={mockState}
           selectedIds={selectedIds}
@@ -790,6 +825,10 @@ export function App() {
           }}
         />
             <BottomDock
+              defaultIcon={defaultIcon}
+              height={dockH}
+              onHeight={setDockH}
+              onResetHeight={resetDockH}
               steps={doc.steps}
               current={doc.current}
               onJump={doc.jumpTo}
@@ -800,9 +839,10 @@ export function App() {
           </div>
         )}
 
+        {activeScreen && <Splitter axis="x" size={rightW} onSize={setRightW} onReset={resetRightW} invert label="Right panel width" />}
         {activeScreen && (
-          <aside className="w-[288px] shrink-0 flex flex-col bg-[var(--panel)] border-l border-[var(--border)] min-h-0">
-            <div className="flex-[3] min-h-[160px] border-b border-[var(--border)]">
+          <aside className="shrink-0 flex flex-col bg-[var(--panel)] min-h-0" style={{ width: rightW }}>
+            <div className="shrink-0 min-h-0" style={{ height: layersH }}>
               <LayersPanel
                 scene={scene}
                 selectedIds={selectedIds}
@@ -810,14 +850,27 @@ export function App() {
                 lockedIds={lockedIds}
                 changedKeys={changedKeys}
                 marks={marks}
-                onSelect={selectNode}
+                onSelect={(n, how) => {
+                  // In Layer view, picking a component in Layers opens it there; anything else
+                  // outside the open component just says it isn't one.
+                  if (explodeId && how !== 'toggle') {
+                    if (isComponent(n)) {
+                      if (n.id !== explodeId) setExplodeId(n.id);
+                      setExplodeNotice(null);
+                    } else if (!n.id.startsWith(explodeId + '/')) {
+                      setExplodeNotice(`${n.name} isn't a component, so it has no layers to show here.`);
+                    }
+                  }
+                  selectNode(n, how);
+                }}
                 onToggleHidden={(id) => doc.set((d) => ({ ...d, hidden: toggleIn(d.hidden, id) }), { label: `${hiddenIds.has(id) ? 'Show' : 'Hide'} ${id.split('/').pop()} (editor)` })}
                 onToggleLocked={(id) => doc.set((d) => ({ ...d, locked: toggleIn(d.locked, id) }), { label: `${lockedIds.has(id) ? 'Unlock' : 'Lock'} ${id.split('/').pop()}` })}
                 onContextMenu={(at, n) => setMenu({ at, items: layerMenu(n, []) })}
                 onExplode={(n) => setExplodeId(n.id)}
               />
             </div>
-            <div className="flex-[2] min-h-[200px] overflow-y-auto">
+            <Splitter axis="y" size={layersH} onSize={setLayersH} onReset={resetLayersH} label="Layers height" />
+            <div className="flex-1 min-h-0 overflow-y-auto">
               <Inspector
                 activeScreen={activeScreen}
                 system={activeSystem}

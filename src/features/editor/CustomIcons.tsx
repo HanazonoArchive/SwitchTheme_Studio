@@ -39,7 +39,12 @@ async function toIconPng(file: Blob, w: number, h: number): Promise<Blob> {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode the icon'))), 'image/png'));
 }
 
-export const CustomIcons: React.FC<{ screen: ThemeScreen; onChange: (extraFiles: ThemeScreen['extraFiles']) => void }> = ({ screen, onChange }) => {
+export const CustomIcons: React.FC<{
+  screen: ThemeScreen;
+  onChange: (extraFiles: ThemeScreen['extraFiles']) => void;
+  /** Picture of the icon the console shows now (from the preview), null when it isn't on screen. */
+  defaultIcon?: (slot: AppletIconSlot) => string | null | undefined;
+}> = ({ screen, onChange, defaultIcon }) => {
   const slots = APPLET_ICON_SLOTS.filter((s) => s.target === screen.target);
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<AppletIconSlot | null>(null);
@@ -55,6 +60,24 @@ export const CustomIcons: React.FC<{ screen: ThemeScreen; onChange: (extraFiles:
     return m;
   }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
+  // The console's default icons, taken from the preview once it has drawn.
+  const [defaults, setDefaults] = useState<Map<string, string | null>>(new Map());
+  useEffect(() => {
+    if (!defaultIcon) return;
+    const t = setTimeout(
+      () =>
+        setDefaults((prev) => {
+          const next = new Map(prev);
+          for (const s of slots) {
+            const v = defaultIcon(s);
+            if (v !== undefined) next.set(s.name, v);
+          }
+          return next;
+        }),
+      300,
+    );
+    return () => clearTimeout(t);
+  }, [defaultIcon, screen.target]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!slots.length) return null;
 
@@ -91,13 +114,21 @@ export const CustomIcons: React.FC<{ screen: ThemeScreen; onChange: (extraFiles:
           const [w, h] = sizeOf(s);
           return (
             <div key={s.name} className="flex items-center gap-2 bg-[var(--panel)] border border-[var(--border)] rounded-lg px-2 py-1.5">
-              <span className="w-8 h-7 rounded shrink-0 flex items-center justify-center" style={{ background: 'repeating-conic-gradient(#555 0 25%, #777 0 50%) 0 0/8px 8px' }}>
-                {url && <img src={url} alt="" className="max-w-full max-h-full" />}
+              <span
+                className="w-8 h-7 rounded shrink-0 flex items-center justify-center overflow-hidden"
+                style={{ background: url || !defaults.get(s.name) ? 'repeating-conic-gradient(#555 0 25%, #777 0 50%) 0 0/8px 8px' : 'var(--panel-2)' }}
+                title={url ? 'Your icon' : defaults.get(s.name) ? 'Console default, as the preview shows it now' : 'Not on screen in this theme'}
+              >
+                {url ? <img src={url} alt="" className="max-w-full max-h-full" /> : defaults.get(s.name) ? <img src={defaults.get(s.name)!} alt="" className="max-w-full max-h-full object-contain" /> : null}
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-[12px] text-[var(--text)] truncate">{LABEL[s.name] ?? s.name}</span>
-                <span className="block text-[11px] text-[var(--text-3)] font-mono">
-                  {s.name}.png · {w}×{h}
+                <span className="block text-[11px] text-[var(--text-3)] truncate">
+                  <span className="font-mono">
+                    {s.name}.png · {w}×{h}
+                  </span>
+                  {' · '}
+                  {url ? 'custom' : defaults.get(s.name) === null && defaultIcon ? 'hidden by this theme' : 'default'}
                 </span>
               </span>
               <button

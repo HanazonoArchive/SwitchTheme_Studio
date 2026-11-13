@@ -131,8 +131,37 @@ export function animationFromJson(json: string): Animation {
 }
 
 /** Value of a curve at its start or end (resting states only need the extremes). */
-export function curveValue(c: Curve, at: 'start' | 'end'): number | undefined {
+/**
+ * A curve's value at a frame: Hermite between keys (Blend is the slope per frame), held before
+ * the first key and after the last. `step` curves (visibility, texture pattern) jump at keys.
+ */
+export function sampleCurve(c: Curve, frame: number, step = false): number | undefined {
   if (!c.keys.length) return undefined;
-  const sorted = [...c.keys].sort((a, b) => a.frame - b.frame);
-  return at === 'start' ? sorted[0].value : sorted[sorted.length - 1].value;
+  const k = [...c.keys].sort((a, b) => a.frame - b.frame);
+  if (frame <= k[0].frame) return k[0].value;
+  const last = k[k.length - 1];
+  if (frame >= last.frame) return last.value;
+  let i = 0;
+  while (i < k.length - 2 && k[i + 1].frame <= frame) i++;
+  const a = k[i];
+  const b = k[i + 1];
+  if (step) return a.value;
+  const d = b.frame - a.frame;
+  if (d <= 0) return b.value;
+  const t = (frame - a.frame) / d;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * a.value + (t3 - 2 * t2 + t) * d * a.blend + (-2 * t3 + 3 * t2) * b.value + (t3 - t2) * d * b.blend;
+}
+
+/**
+ * Where an animation rests: its first frame, or its last one. An animation stops at its frame
+ * count even when keys go further (Gengar's Inactive is 6 frames long with a key at 12: the
+ * unfocused icons stop halfway, 60 px up, as on the console).
+ */
+export function curveValue(c: Curve, at: 'start' | 'end', frameSize?: number, step = false): number | undefined {
+  if (!c.keys.length) return undefined;
+  if (at === 'start') return sampleCurve(c, 0, step) ?? undefined;
+  if (frameSize === undefined || frameSize <= 0) return [...c.keys].sort((a, b) => a.frame - b.frame).pop()!.value;
+  return sampleCurve(c, frameSize, step);
 }

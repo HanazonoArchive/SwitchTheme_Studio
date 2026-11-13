@@ -344,6 +344,27 @@ two side faces for thickness. Tiles (thumbnail, name, kind, state) sit in two co
 to their slab's corner with a line. The tile card and the slab carry the layer's key (the card's
 id is `id#tile`, mapped back on select); clicks only select there (no handles).
 
+## Animations rest at their frame count
+
+A layout animation stops at its FrameSize even when keys go further: Gengar's
+`RdtBtnIconGame_Inactive` is 6 frames long with RootPane Y going 120 → 0 at frame 12, so unfocused
+icons rest at 60 (Hermite between the keys), which puts the game row exactly where the pack's
+console screenshot has it (it was 60 px low). Curves are now sampled with Hermite interpolation
+(Blend is the slope per frame). `RdtBtnIconGame_User_xx` are the exception: qlaunch seeks them to
+the frame for the number of players, so their keys past the end (the player's picture at frame
+10 of a 1-frame animation) are reached, as the console screenshots of the other packs show. The
+other packs render pixel-identical with this rule.
+
+## Panels, Layer view navigation, default icons
+
+- Dividers between Screens/tabs, the left column/canvas, the canvas/right column, Layers/Inspector
+  and the canvas/bottom dock are draggable (keyboard too), remembered in this browser, double-click
+  to reset (`components/Splitter.tsx`, `usePanelSize.ts`).
+- In Layer view, picking a component in Layers opens it there; picking anything outside the open
+  component says it isn't one. Layer view draws on the canvas background, without the screen.
+- Assets shows the console's default icon for each slot by taking a picture of that pane from the
+  preview (`canvas/snapshot.ts`, Pixi extract), or says the theme hides it.
+
 ## Known gaps / next steps
 
 1. UI text comes from message files, so strings are mocked (English) per screen.

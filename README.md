@@ -28,7 +28,7 @@ in the browser is what the console shows. Nothing needs to be installed and noth
 browser.
 
 > [!WARNING]
-> **Experimental.** This project is still a work in progress: the preview is built to match the
+> **Alpha.** Usable, but expect bugs and problems: the preview is built to match the
 > console but can be wrong, so test every theme on your console before sharing it.
 > Installing custom themes requires a console running custom firmware and NXThemes Installer, at your
 > own risk (warranty, online bans). This project is not affiliated with or endorsed by Nintendo.
@@ -365,7 +365,7 @@ a time. The same steps are in the studio under **⋯ → If something goes wrong
 
 ## Disclaimer
 
-SwitchTheme Studio is an unofficial, experimental fan project, provided "as is" without warranty of
+SwitchTheme Studio is an unofficial fan project in alpha, provided "as is" without warranty of
 any kind. The authors aren't responsible for damage, data loss, bans or other consequences of using it
 or the themes made with it. It is not affiliated with, endorsed or sponsored by Nintendo; Nintendo
 Switch is a trademark of Nintendo. The studio ships no Nintendo files; layouts loaded from your console

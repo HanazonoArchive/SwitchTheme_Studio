@@ -374,3 +374,23 @@ other packs render pixel-identical with this rule.
    animations in motion) is a next step.
 4. Verified against a real firmware 23.0.1 dump: all 579 layouts parse, every parts pane resolves,
    and the sample themes' patches all match. Other firmware versions haven't been tested.
+
+## Export verified with the injector's own code
+
+Exports were checked with NxThemeTool (built from exelix11/SwitchThemeInjector, Themes common 4.9)
+against a real firmware 23.0.1 dump:
+
+- Five real theme packs (32 screens) were opened in the studio and exported again. `validate` was
+  clean for every exported .nxtheme, and `apply` produced patched .szs files **byte-identical** to
+  applying the original .nxtheme. Images (image.jpg, icon PNGs) are copied byte-for-byte.
+  Only `preview.jpg` (a store thumbnail the installer doesn't use) is not carried over.
+- A new theme (stock layout + moved pane + custom icon + game-icon focus scale) validates clean and
+  applies: the patched ResidentMenu.szs has the moved pane and the `STS_G_Focus` animation with the
+  1.3 scale keys. A background swapped to DXT1 .dds replaces `White1x1A128^s` with a 1280×720 BC1
+  texture, as the installer does on the console (it converts image.jpg itself; NxThemeTool can't).
+- Loading the patched .szs back into the studio renders within DXT1 noise of the studio's own
+  preview of the theme (mean pixel difference 1.9/255).
+- info.json now carries an `Id` (8 hex chars, stable per project; an imported theme keeps its own),
+  which the injector's tools warn about when missing.
+- The injector's background picture (material `P_Custm`) isn't recoloured for Basic Black, so an
+  installed .szs loaded as console files previews at full brightness.

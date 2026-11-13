@@ -66,6 +66,15 @@
   .ui-btn:hover:not(:disabled) {
     background: var(--hover);
   }
+  /* Toolbar buttons: no outline, a fill only on hover. */
+  .ui-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-2);
+  }
+  .ui-btn-ghost:hover:not(:disabled) {
+    color: var(--text);
+  }
   .ui-btn-primary {
     background: var(--accent);
     border-color: transparent;

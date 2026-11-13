@@ -84,7 +84,7 @@ export const HelpDialog: React.FC<{ tab: HelpTab; onTab: (t: HelpTab) => void; o
           <div className="flex-1 overflow-y-auto p-5 select-text">
             {tab === 'start' && (
               <>
-                <Callout tone="warn">SwitchTheme Studio is experimental. The preview is built to match the console, but it can be wrong. Test every theme on your console before you share it.</Callout>
+                <Callout tone="warn">SwitchTheme Studio is in alpha: it's usable, but expect bugs and rough edges. The preview is built to match the console, but it can be wrong. Test every theme on your console before you share it.</Callout>
                 <H>1. Open or start a theme</H>
                 <P>Open an .nxtheme (or a folder's .zip), or start a new one from the start page. Your work is saved in this browser as you go and listed under Recent.</P>
                 <H>2. Pick a screen and edit</H>
@@ -157,7 +157,7 @@ export const HelpDialog: React.FC<{ tab: HelpTab; onTab: (t: HelpTab) => void; o
             {tab === 'legal' && (
               <>
                 <Callout tone="warn">
-                  <b>Experimental software.</b> This project is still a work in progress. Features may change, and the preview may not match your console exactly.
+                  <b>Alpha software.</b> It's usable, but expect bugs and problems. Features may change, and the preview may not match your console exactly.
                 </Callout>
                 <H>Caution</H>
                 <ul className="list-disc pl-5 mb-2 space-y-1 text-[12.5px] text-[var(--text-2)]">

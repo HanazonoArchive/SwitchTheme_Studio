@@ -32,8 +32,8 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
     <header className="h-11 bg-[var(--panel)] border-b border-[var(--border)] px-3 grid grid-cols-[1fr_auto_1fr] items-center shrink-0 z-20">
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-[13px] font-semibold text-[var(--text)] whitespace-nowrap">SwitchTheme Studio</span>
-        <button className="ui-badge-exp" title="Experimental: still a work in progress. Test every theme on your console. Click for the disclaimer." onClick={() => onHelp('legal')}>
-          Experimental
+        <button className="ui-badge-exp" title="Alpha: usable, but expect bugs and rough edges. Test every theme on your console. Click for the disclaimer." onClick={() => onHelp('legal')}>
+          Alpha
         </button>
         {project && (
           <>
@@ -87,7 +87,7 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
           </>
         )}
         <input ref={fileRef} type="file" multiple accept=".nxtheme,.zip" className="hidden" onChange={(e) => (e.target.files?.length && onOpenFiles(Array.from(e.target.files)), (e.target.value = ''))} />
-        <button onClick={() => fileRef.current?.click()} className="ui-btn" title="Open an .nxtheme">
+        <button onClick={() => fileRef.current?.click()} className="ui-btn ui-btn-ghost" title="Open an .nxtheme">
           <FolderOpen className="w-3.5 h-3.5" />
           Open
         </button>
@@ -98,7 +98,7 @@ export const TopBar: React.FC<TopBarProps> = ({ project, mode, onModeChange, onO
           </button>
         )}
         <button
-          className="ui-btn"
+          className="ui-btn ui-btn-ghost"
           onClick={onConsoleFiles}
           title={consoleStatus.loaded ? `${consoleStatus.loaded} of ${consoleStatus.total} layout files from your console${consoleStatus.version ? ` (firmware ${consoleStatus.version})` : ''}` : 'Using the built-in presets. Load your console\'s files for an exact preview.'}
         >

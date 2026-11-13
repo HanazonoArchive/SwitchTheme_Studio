@@ -248,15 +248,20 @@ The pack was generated from firmware 23.0.1, and the Layout tab shows that versi
 Textures only change how things look, never where they sit: rendering the community packs with the
 built-in pack and with a real dump gives the same layout to the pixel.
 
-For an exact check with the console's own textures, load your files in **Layout → Console layout** or
-drop a `.szs` on the canvas. In NXThemes Installer choose **Extract home menu → Extract szs layout
-files**, then copy:
+For your firmware's exact layouts, animations and textures, load your console's files in one go
+with **Console files** (top bar). In NXThemes Installer choose **Extract home menu**, copy the
+`extracted` folder from the SD card, zip it and drop the zip (or pick the folder):
 
 ```
-sd:/themes/systemData/extracted/qlaunch/lyt/*.szs
-sd:/themes/systemData/extracted/mypage/lyt/*.szs
-sd:/themes/systemData/extracted/playerselect/lyt/*.szs
+extracted/
+  ver.cfg                                  firmware version
+  qlaunch/lyt/ResidentMenu.szs, Entrance.szs, Flaunch.szs, Set.szs, Notification.szs, common.szs
+  mypage/lyt/MyPage.szs
+  playerselect/lyt/Psl.szs
 ```
+
+Each file replaces the built-in preset for its screen; screens without one keep the preset. The
+dialog lists which of the eight files are loaded and the firmware from `ver.cfg`.
 
 The files stay in your browser. Don't commit or share them (`*.szs` is gitignored).
 

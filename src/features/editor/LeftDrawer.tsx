@@ -41,6 +41,7 @@ interface LeftDrawerProps {
   onRevertPane: (key: string, field?: keyof PanePatch) => void;
   onLoadSystemSzs: (files: File[]) => void;
   onForgetSystemSzs: (target: ScreenTarget) => void;
+  onOpenConsoleFiles: () => void;
   onCommitHistory: () => void;
 }
 
@@ -86,6 +87,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
   onRevertPane,
   onLoadSystemSzs,
   onForgetSystemSzs,
+  onOpenConsoleFiles,
   onCommitHistory,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -335,8 +337,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                     Your console's {info.szs} ({system?.layouts.size} layouts, firmware {system?.firmwareHint}). Textures are exact.
                   </div>
                   <div className="flex gap-3">
-                    <button onClick={() => szsInputRef.current?.click()} className="text-[12px] text-[var(--text-2)] hover:text-[var(--text)]">
-                      Replace
+                    <button onClick={onOpenConsoleFiles} className="text-[12px] text-[var(--text-2)] hover:text-[var(--text)]">
+                      Console files…
                     </button>
                     <button onClick={() => onForgetSystemSzs(activeScreen.target)} className="text-[12px] text-[var(--text-2)] hover:text-[var(--danger)]">
                       Use built-in
@@ -349,20 +351,10 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                     {system ? <>Built-in stock layout (firmware {system.consoleVersion ?? system.firmwareHint}). Positions and sizes are the console's; icons are stand-ins.</> : <>Loading the built-in layout…</>}
                   </p>
                   <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
-                    For the console's own icons and textures, load your files: NXThemes Installer → Extract home menu, then:
+                    For the console's own icons and textures, load your files: NXThemes Installer → Extract home menu, then <span className="font-mono">sd:/themes/systemData/extracted/…/lyt/*.szs</span>. They stay in this browser.
                   </p>
-                  <div className="font-mono text-[11px] text-[var(--text-2)] bg-[var(--panel)] px-2 py-1.5 rounded border border-[var(--border)] break-all select-all leading-normal my-1">
-                    sd:/themes/systemData/extracted/…/lyt/{info.szs}
-                  </div>
-                  <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
-                    They stay in this browser.
-                  </p>
-                  <button
-                    onClick={() => szsInputRef.current?.click()}
-                    className="ui-btn w-full justify-center py-1.5 text-center leading-tight flex-wrap"
-                  >
-                    <span>Load {info.szs}</span>
-                    <span className="text-[11px] opacity-70 font-normal">(optional)</span>
+                  <button onClick={() => szsInputRef.current?.click()} className="ui-btn w-full justify-center">
+                    Load {info.szs} (optional)
                   </button>
                 </>
               )}

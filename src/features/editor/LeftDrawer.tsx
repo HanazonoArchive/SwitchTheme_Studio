@@ -20,6 +20,7 @@ import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { UsersEditor } from './UsersEditor';
+import { PresetsPanel } from './PresetsPanel';
 
 interface LeftDrawerProps {
   activeTab: RailTab;
@@ -33,7 +34,7 @@ interface LeftDrawerProps {
   mockState: MockSystemState;
   selectedKey: string | null;
   onSelect: (key: string | null) => void;
-  onUpdateActiveScreen: (updates: Partial<ThemeScreen>, opts?: { transient?: boolean }) => void;
+  onUpdateActiveScreen: (updates: Partial<ThemeScreen>, opts?: { transient?: boolean; label?: string }) => void;
   onUpdateMockState: (updates: Partial<MockSystemState>) => void;
   onReplaceWallpaper: (file: File) => void;
   onExtractWallpaper: () => void;
@@ -317,6 +318,7 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
 
         {activeTab === 'panes' && (
           <div className="space-y-4">
+            <PresetsPanel key={activeScreen.id} screen={activeScreen} onApply={(u, label) => onUpdateActiveScreen(u, { label })} />
             {/* Stock layout source */}
             <div className={`${card} space-y-2`}>
               <div className="flex items-center gap-1.5">

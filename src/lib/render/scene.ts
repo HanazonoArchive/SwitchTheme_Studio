@@ -939,9 +939,12 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
   const kids: SceneNode[] = [];
   const mainNode = node(root, mainFile.width, mainFile.height, base(main, system.mainLayout), centre, '');
   if (mainNode) kids.push(mainNode);
-  const footerRoot = common && FOOTER_HINTS[target] ? common.trees.get('blyt/FooterAll.bflyt') : null;
+  // qlaunch draws the footer through Footer.bflyt, whose L_Footer part is FooterAll.bflyt, so a
+  // common.json that hides or moves L_Footer (several Themezer layouts do) shows here too.
+  const footerFile = common?.trees.get('blyt/Footer.bflyt') ? 'blyt/Footer.bflyt' : 'blyt/FooterAll.bflyt';
+  const footerRoot = common && FOOTER_HINTS[target] ? common.trees.get(footerFile) : null;
   if (footerRoot && common) {
-    const f = node(footerRoot, 1280, 720, base(common, 'blyt/FooterAll.bflyt'), centre, '/common');
+    const f = node(footerRoot, 1280, 720, base(common, footerFile), centre, '/common');
     if (f) kids.push(f);
   }
   const sceneRoot = group('', centre, kids);

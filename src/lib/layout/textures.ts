@@ -77,6 +77,9 @@ export function alphaOnlyTexture<T extends BntxTexture | StockTexture>(tex: T): 
   return wrapper;
 }
 
+/** Material name the injector gives the background picture it adds (PatchingExtension.AddBgMat). */
+export const INJECTED_BG_MATERIAL = 'P_Custm';
+
 export function paneVisual(
   pane: BflytPane,
   material: BflytMaterial | undefined,
@@ -96,7 +99,9 @@ export function paneVisual(
   // Keep the material's alpha (animations fade panes through it).
   // A theme that sets C_W to 0 opts out of the palette: the console draws the material's white as
   // is, in Basic Black too (Gengar's pastel pills, Zhi's white cursors).
-  const cwOff = pane.userData?.C_W !== undefined && !pane.userData.C_W[0];
+  // The installer's own background picture (material "P_Custm", added by PatchBgLayout) is drawn
+  // as is: the console doesn't recolour it for Basic Black. Seen when an installed .szs is loaded.
+  const cwOff = (pane.userData?.C_W !== undefined && !pane.userData.C_W[0]) || material.name === INJECTED_BG_MATERIAL;
   const white: Rgba = cw ? [cw[0], cw[1], cw[2], Math.min(cw[3], matWhite[3])] : cwOff ? matWhite : themeColor(matWhite, dark);
   const mul = (c: Rgba): Rgba => [(c[0] * vertex[0]) / 255, (c[1] * vertex[1]) / 255, (c[2] * vertex[2]) / 255, (c[3] * vertex[3]) / 255];
 

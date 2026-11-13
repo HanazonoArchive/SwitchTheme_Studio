@@ -150,6 +150,13 @@ function layoutLabel(l: LayoutPatch) {
   return l.AuthorName ? `${l.PatchName} by ${l.AuthorName}` : l.PatchName;
 }
 
+/** A stable 8-character hex ID from the project's id (FNV-1a), like the injector's GUID prefix. */
+export function themeId(projectId: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < projectId.length; i++) h = Math.imul(h ^ projectId.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+
 export async function buildNxTheme(project: ThemeProject, screen: ThemeScreen): Promise<Blob> {
   const zip = new JSZip();
   const info: Record<string, unknown> = {
@@ -162,6 +169,9 @@ export async function buildNxTheme(project: ThemeProject, screen: ThemeScreen): 
   const label = hasLayoutChanges(screen.layout) ? layoutLabel(screen.layout) : undefined;
   if (label) info.LayoutInfo = label;
   else delete info.LayoutInfo;
+  // The injector's own tools give every theme an ID (8+ characters) and warn without one. Keep an
+  // imported theme's ID; otherwise use one that stays the same for this project across exports.
+  if (typeof info.Id !== 'string' || info.Id.length < 8) info.Id = themeId(project.id);
   zip.file('info.json', JSON.stringify(info));
 
   if (hasLayoutChanges(screen.layout)) {

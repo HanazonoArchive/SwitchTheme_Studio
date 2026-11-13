@@ -105,13 +105,13 @@ export const CustomIcons: React.FC<{ screen: ThemeScreen; onChange: (extraFiles:
                   setPending(s);
                   input.current?.click();
                 }}
-                className="p-1 rounded text-[var(--text-3)] hover:text-[var(--text)]"
+                className="ui-row-action"
                 title={url ? 'Replace' : 'Add'}
               >
                 <Upload className="w-3.5 h-3.5" />
               </button>
               {url && (
-                <button onClick={() => remove(s)} className="p-1 rounded text-[var(--text-3)] hover:text-red-300" title="Remove (back to the console icon)">
+                <button onClick={() => remove(s)} className="ui-row-action ui-row-action-danger" title="Remove (back to the console icon)">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}

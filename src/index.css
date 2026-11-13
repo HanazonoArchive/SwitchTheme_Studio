@@ -412,3 +412,75 @@ input[type='range']::-moz-range-thumb {
     background: var(--warn);
   }
 }
+
+/* Notes and cautions (components/Note.tsx). */
+:root {
+  --info: #38bdf8;
+}
+@layer components {
+  .ui-note {
+    display: flex;
+    gap: 8px;
+    padding: 8px 10px 8px 9px;
+    border-radius: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--tone);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .ui-note-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--tone);
+  }
+  .ui-note-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--tone);
+    margin-bottom: 1px;
+  }
+  .ui-note-body {
+    color: var(--text-2);
+  }
+  .ui-note-compact {
+    padding: 6px 8px 6px 7px;
+  }
+  .ui-note-compact .ui-note-title {
+    display: none;
+  }
+}
+
+/*
+ * Actions inside a list row (delete, hide, lock…). The row already highlights on hover, so the
+ * action doesn't draw a second box of its own: it fills the row's height and only its colour
+ * changes. Keyboard focus still shows a ring.
+ */
+@layer components {
+  .ui-row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    width: 26px;
+    min-height: 22px;
+    flex-shrink: 0;
+    color: var(--text-3);
+    background: transparent;
+    border-radius: 6px;
+    transition: color 0.12s;
+  }
+  .ui-row-action:hover {
+    color: var(--text);
+  }
+  .ui-row-action-danger:hover {
+    color: var(--danger);
+  }
+  .ui-row-action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+}

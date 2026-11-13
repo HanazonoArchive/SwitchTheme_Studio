@@ -156,11 +156,11 @@ export const BottomDock: React.FC<Props> = ({ steps, current, onJump, screen, on
                 <span className="block text-[12px] text-[var(--text)] truncate">{font ? font.name : 'Default (placeholder)'}</span>
                 <span className="block text-[11px] text-[var(--text-3)] truncate">{font ? 'Your font, this session only' : 'Nunito Sans, standing in for the console font'}</span>
               </span>
-              <button onClick={() => fontInput.current?.click()} className="p-1 rounded text-[var(--text-3)] hover:text-[var(--text)]" title="Use a font file for the preview (TTF, OTF, WOFF)">
+              <button onClick={() => fontInput.current?.click()} className="ui-row-action" title="Use a font file for the preview (TTF, OTF, WOFF)">
                 <Upload className="w-3.5 h-3.5" />
               </button>
               {font && (
-                <button onClick={resetFont} className="p-1 rounded text-[var(--text-3)] hover:text-[var(--text)]" title="Back to the default font">
+                <button onClick={resetFont} className="ui-row-action" title="Back to the default font">
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
               )}

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { AlertTriangle, BookOpen, Keyboard, LifeBuoy, ShieldAlert, Shapes, X } from 'lucide-react';
+import { BookOpen, Keyboard, LifeBuoy, ShieldAlert, Shapes, X } from 'lucide-react';
 import { Legend } from './Viewport';
+import { Note } from '../../components/Note';
 
 /**
  * Help: how to use the studio, what to do when a theme breaks the console (black screen, Home
@@ -20,15 +21,10 @@ const TABS: { id: HelpTab; label: string; Icon: React.FC<{ className?: string }>
 const H: React.FC<{ children: React.ReactNode }> = ({ children }) => <h3 className="text-[13px] font-semibold text-[var(--text)] mt-4 mb-1.5 first:mt-0">{children}</h3>;
 const P: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-[12.5px] text-[var(--text-2)] leading-relaxed mb-2">{children}</p>;
 const Code: React.FC<{ children: React.ReactNode }> = ({ children }) => <code className="font-mono text-[11.5px] px-1 py-0.5 rounded bg-[var(--panel-2)] border border-[var(--border)] text-[var(--text)] break-all">{children}</code>;
-const Callout: React.FC<{ tone: 'warn' | 'danger' | 'info'; children: React.ReactNode }> = ({ tone, children }) => (
-  <div
-    className={`flex gap-2 p-2.5 my-2 rounded-lg border text-[12.5px] leading-relaxed ${
-      tone === 'danger' ? 'bg-red-500/10 border-red-500/30 text-red-200' : tone === 'warn' ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-sky-500/10 border-sky-500/30 text-sky-200'
-    }`}
-  >
-    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-    <div>{children}</div>
-  </div>
+const Callout: React.FC<{ tone: 'warn' | 'danger' | 'info'; title?: string; children: React.ReactNode }> = ({ tone, title, children }) => (
+  <Note tone={tone === 'danger' ? 'error' : tone} title={title ?? (tone === 'danger' ? 'Important' : tone === 'warn' ? 'Caution' : 'Tip')} className="my-2">
+    {children}
+  </Note>
 );
 
 const KEYS: [string, string][] = [

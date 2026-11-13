@@ -197,7 +197,7 @@ export const StartPage: React.FC<Props> = ({ onOpen }) => {
                     </button>
                     {busy === r.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-3)]" />}
                     <button
-                      className="ui-icon-btn opacity-0 group-hover:opacity-100"
+                      className="ui-row-action ui-row-action-danger opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                       title="Remove from this browser"
                       onClick={async () => {
                         await deleteProject(r.id);

@@ -71,8 +71,15 @@ describe('editor geometry', () => {
     const comp = node('r/c', { kind: 'prt1', children: [a, b] });
     const scene: Scene = { width: 1280, height: 720, root: node('r', { children: [comp] }), flat: [] };
     const ex = explodeScene(scene, comp);
-    expect(ex.tiles.map((t) => t.id)).toEqual(['r/c/a', 'r/c/b']);
-    expect(ex.tiles[1].note).toBe('not shown right now');
+    // Top of the stack first, alternating sides.
+    expect(ex.tiles.map((t) => [t.id, t.side])).toEqual([
+      ['r/c/b', 'left'],
+      ['r/c/a', 'right'],
+    ]);
+    expect(ex.tiles[0].note).toBe('not shown right now');
+    // Bottom layer's slab is lowest on screen.
+    const cy = (id: string) => ex.slabs.find((s) => s.id === id)!.quad.reduce((a, p) => a + p[1], 0) / 4;
+    expect(cy('r/c/a')).toBeGreaterThan(cy('r/c/b'));
     const tiles = ex.scene.root.children;
     expect(tiles.every((t) => !t.hidden && t.opacity === 1 && t.matrix)).toBe(true);
     // Tiles don't overlap.

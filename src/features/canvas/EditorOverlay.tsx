@@ -54,6 +54,8 @@ interface Props {
   /** Cursor in layout units (rulers), null when it leaves. */
   onCursor?: (p: Pt | null) => void;
   onToolChange?: (t: Tool) => void;
+  /** Clicks only select (Layer view: no moving, resizing or rotating). */
+  selectOnly?: boolean;
 }
 
 /**
@@ -135,6 +137,7 @@ export const EditorOverlay: React.FC<Props> = ({
   onContextMenu,
   onCursor,
   onToolChange,
+  selectOnly = false,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -389,6 +392,10 @@ export const EditorOverlay: React.FC<Props> = ({
     const inSel = !multi && !deep && !twice ? selectedNodes.find((s) => !blockedBy(s.id, lockedIds) && inside(s, x, y)) : undefined;
     const n = inSel ?? resolve(hit(x, y), deep ? 'deep' : twice ? 'into' : 'click');
     // Ctrl+drag, or a drag from empty canvas: selection box.
+    if (!n && selectOnly) {
+      if (!multi) onSelect(null);
+      return;
+    }
     if (!n || ((e.ctrlKey || e.metaKey) && !twice)) {
       drag.current = { kind: 'marquee', x0: x, y0: y, additive: multi, node: n };
       // A plain click on empty canvas clears the selection; with a modifier it adds to it.
@@ -400,7 +407,7 @@ export const EditorOverlay: React.FC<Props> = ({
       return;
     }
     if (!isSelected(n.id)) onSelect(n);
-    drag.current = { kind: 'pending', node: n, x0: x, y0: y };
+    if (!selectOnly) drag.current = { kind: 'pending', node: n, x0: x, y0: y };
   };
 
   const hitAny = (x: number, y: number) => {
@@ -633,7 +640,7 @@ export const EditorOverlay: React.FC<Props> = ({
   const comp = !!selected && isComponent(selected);
   const selBox = selQuad ? bounds(selQuad) : null;
   const single = selectedNodes.length === 1;
-  const editableSel = !!selected && single && !blockedBy(selected.id, lockedIds) && selected.editable;
+  const editableSel = !selectOnly && !!selected && single && !blockedBy(selected.id, lockedIds) && selected.editable;
   const handlePoints =
     selQuad && editableSel
       ? HANDLES.map(([hx, hy]) => {
@@ -845,7 +852,7 @@ export const EditorOverlay: React.FC<Props> = ({
           {!multiBox && blockedBy(selected.id, lockedIds) ? ' · locked' : ''}
         </div>
       )}
-      {mode === 'edit' && selected && selBox && !readout && tool === 'select' && (
+      {mode === 'edit' && selected && selBox && !readout && tool === 'select' && !selectOnly && (
         <div
           className="absolute pointer-events-none whitespace-nowrap tabular-nums text-white"
           style={{

@@ -69,8 +69,12 @@ browser.
 - **Multi-select and a layer menu.** <kbd>Ctrl</kbd>/<kbd>Shift</kbd>+click or a selection box, move and nudge
   them together. Right-click lists every layer under the cursor and offers hide/lock (editor),
   visible/invisible (theme), favourites, colour tags, draw order, revert and Layer view.
-- **Layer view.** Lays every layer of a component out side by side (the icon, its highlight, the
-  pressed and suspended states…) so you can pick and edit the one you want.
+- **Layer view.** Takes a component apart: its layers float as a stack of see-through slabs seen
+  at an angle, each connected to a tile with its picture and name (the icon, its highlight, the
+  pressed and suspended states…). Click a slab or a tile to pick and edit that layer.
+- **Game icon size and focus zoom.** Set the size of all game icons and how much the focused one
+  grows. Stock, the console doesn't enlarge a focused game (only the cursor shows); themes do it
+  with animations, which the editor reads and writes for you.
 - **Organised layers.** Filters for components, changed, hidden in theme, hidden, locked,
   favourites and colour tags. A component's layers are hidden and locked with it.
 - **Meaningful outlines.** Colour says what a layer is (component, changed, hidden in the theme,
@@ -180,11 +184,11 @@ The start page offers:
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/measure.jpg" alt="The measure tool: a pink line from the clock to a game icon reading 767.1 px, Δx 555.7, Δy 528.8, -43.6°" /></td>
-    <td width="50%"><img src="docs/screenshots/layerview.jpg" alt="Layer view of a game icon: the icon, its blank card, wait spinner, suspended outline, Playing text and progress bars each on their own tile" /></td>
+    <td width="50%"><img src="docs/screenshots/layerview.jpg" alt="Layer view of a game icon: its layers as a stack of see-through slabs seen at an angle, each connected by a line to a tile with its thumbnail and name; P_Line is selected" /></td>
   </tr>
   <tr>
     <td><sub>Measure (<kbd>M</kbd>): distance, legs and angle, snapping to edges and centres, with rulers in console pixels.</sub></td>
-    <td><sub>Layer view: every layer of a component side by side, including the ones not shown right now.</sub></td>
+    <td><sub>Layer view: a component taken apart into slabs, each tied to a tile; click either to select that layer.</sub></td>
   </tr>
 </table>
 

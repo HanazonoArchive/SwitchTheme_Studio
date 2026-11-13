@@ -1,12 +1,15 @@
 import React from 'react';
-import { Eye, EyeOff, RotateCcw, AlertTriangle, MousePointerClick, Info, OctagonAlert } from 'lucide-react';
+import { Eye, EyeOff, RotateCcw, MousePointerClick } from 'lucide-react';
 import { NumberField } from './NumberField';
+import { Note } from '../../components/Note';
 import { fieldNote, type PaneNote } from '../../lib/layout/limits';
 import type { ThemeScreen } from '../../types/theme';
 import type { SystemLayout } from '../../lib/layout/systemLayouts';
 import { getPaneInfo } from '../../lib/layout/paneModel';
 import type { JVec3, LayoutPatch, PaneEdit, PanePatch } from '../../lib/layout/patch';
 import { StyleSections } from './StyleSections';
+import { IconScaleSection } from './IconScaleSection';
+import { ICON_FILE } from '../../lib/layout/focusScale';
 import type { Origin } from '../../lib/nx/bflyt';
 
 interface InspectorProps {
@@ -15,7 +18,7 @@ interface InspectorProps {
   selectedKey: string | null;
   onEditPane: (key: string, edit: PaneEdit) => void;
   onRevertPane: (key: string, field?: keyof PanePatch) => void;
-  onEditLayout: (fn: (layout: LayoutPatch) => LayoutPatch, opts?: { transient?: boolean }) => void;
+  onEditLayout: (fn: (layout: LayoutPatch) => LayoutPatch, opts?: { transient?: boolean; label?: string }) => void;
   onCommit: () => void;
   /** Preview is in Basic Black (palette swatches). */
   dark: boolean;
@@ -25,23 +28,7 @@ interface InspectorProps {
   alsoSelected?: number;
 }
 
-const NOTE_STYLE = {
-  error: { box: 'bg-red-500/10 border-red-500/30 text-red-200', Icon: OctagonAlert, tag: 'Not supported' },
-  warn: { box: 'bg-amber-500/10 border-amber-500/30 text-amber-200', Icon: AlertTriangle, tag: 'Caution' },
-  info: { box: 'bg-sky-500/10 border-sky-500/30 text-sky-200', Icon: Info, tag: 'Note' },
-} as const;
-
-export const NoteBox: React.FC<{ note: PaneNote }> = ({ note }) => {
-  const st = NOTE_STYLE[note.level];
-  return (
-    <div className={`flex gap-2 p-2.5 rounded-lg border text-[12px] leading-relaxed ${st.box}`}>
-      <st.Icon className="w-4 h-4 shrink-0 mt-0.5" />
-      <span>
-        <b className="font-semibold">{st.tag}.</b> {note.text}
-      </span>
-    </div>
-  );
-};
+export const NoteBox: React.FC<{ note: PaneNote }> = ({ note }) => <Note tone={note.level}>{note.text}</Note>;
 
 const ORIGIN_X = ['Center', 'Left', 'Right'];
 const ORIGIN_Y = ['Center', 'Top', 'Bottom'];
@@ -136,34 +123,28 @@ export const Inspector: React.FC<InspectorProps> = ({ activeScreen, system, sele
         {notes.map((n, i) => (
           <NoteBox key={i} note={n} />
         ))}
+        {activeScreen.target === 'home' && (info.file === ICON_FILE || (/RdtBase/.test(info.file) && /^N_Icon_\d+$/.test(info.name))) && (
+          <IconScaleSection layout={activeScreen.layout} system={system} onEditLayout={onEditLayout} />
+        )}
 
         {!system && (
-          <div className="flex gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[12px] leading-relaxed">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              Stock values are unknown without your console's layout file, so fields you haven't changed show 0 / 1. Editing one axis writes the
-              other as shown. Load the .szs in the Panes tab to see real defaults.
-            </span>
-          </div>
+          <Note tone="warn" title="Stock values unknown">
+            Without your console's layout file, fields you haven't changed show 0 / 1. Editing one axis writes the other as shown. Load the .szs in the
+            Panes tab to see real defaults.
+          </Note>
         )}
         {info.fixes.length > 0 && (
-          <div className="flex gap-2 p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-200 text-[12px] leading-relaxed">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              The installer also changes this pane on your firmware ({info.fixes.map((f) => f.name).join(', ')}). Stock values and the preview include it.
-            </span>
-          </div>
+          <Note tone="info" title="Installer fix">
+            The installer also changes this pane on your firmware ({info.fixes.map((f) => f.name).join(', ')}). Stock values and the preview include it.
+          </Note>
         )}
         {info.missingInStock && (
           <NoteBox note={{ level: 'error', text: `This pane isn't in your console's ${info.file}. The installer silently skips it, so this patch does nothing on your firmware.` }} />
         )}
         {implicitZero.length > 0 && (
-          <div className="flex gap-2 p-2.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-200 text-[12px] leading-relaxed">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              {implicitZero.join(', ')} leaves out an axis. The injector treats a missing axis as 0, not "unchanged", and so does this preview.
-            </span>
-          </div>
+          <Note tone="warn" title="Missing axis">
+            {implicitZero.join(', ')} leaves out an axis. The injector treats a missing axis as 0, not "unchanged", and so does this preview.
+          </Note>
         )}
 
         <Section title="Position" patched={has('Position')} onRevert={() => onRevertPane(selectedKey, 'Position')}>

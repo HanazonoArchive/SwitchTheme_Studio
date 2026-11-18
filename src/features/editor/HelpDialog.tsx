@@ -86,13 +86,15 @@ export const HelpDialog: React.FC<{ tab: HelpTab; onTab: (t: HelpTab) => void; o
               <>
                 <Callout tone="warn">SwitchTheme Studio is in alpha: it's usable, but expect bugs and rough edges. The preview is built to match the console, but it can be wrong. Test every theme on your console before you share it.</Callout>
                 <H>1. Open or start a theme</H>
-                <P>Open an .nxtheme (or a folder's .zip), or start a new one from the start page. Your work is saved in this browser as you go and listed under Recent.</P>
+                <P>Open an .nxtheme (or a folder's .zip), or start a new one from the start page. Your work is saved in this browser as you go and listed under Recent. Not sure where to start? The Layout tab's "Start from a layout" has the community layouts from Themezer for every screen.</P>
                 <H>2. Pick a screen and edit</H>
                 <P>Screens are on the left. Click a layer on the canvas or in Layers; drag to move, use the handles to resize, the round knob to rotate. Game icons, applet buttons and settings rows are components: they move and scale as one. Double-click to go inside, or use Layer view (the grid button on a component in Layers, or right-click) to see every layer of a component side by side and pick the one you want.</P>
                 <H>3. Check the cautions</H>
                 <P>Some values are replaced by the console at runtime (the status bar row, the User page menu, title balloons…). The Inspector and the drag readout say so, and the patch is still written. Red notes mean the patch can't work on this firmware.</P>
                 <H>4. Export</H>
-                <P>Export .nxtheme and install it with NXThemes Installer on your console. Load your console's own .szs files (Panes tab) for the most exact preview; they stay in this browser and are never uploaded or exported.</P>
+                <P>Export .nxtheme and install it with NXThemes Installer on your console. Load your console's own .szs files (Console files in the top bar) for the most exact preview; they stay in this browser and are never uploaded or exported.</P>
+                <H>5. Share it</H>
+                <P>The camera button under the canvas saves a 1280×720 picture of the screen, for sharing or for the screenshots Themezer asks for when you upload. The theme pack can also carry a Hekate boot logo made from your Home menu background.</P>
               </>
             )}
             {tab === 'trouble' && (
@@ -127,6 +129,12 @@ export const HelpDialog: React.FC<{ tab: HelpTab; onTab: (t: HelpTab) => void; o
                 <P>If the Home menu still opens, NXThemes Installer can remove the installed theme from its menu.</P>
                 <H>After a system update</H>
                 <P>Every firmware update can break installed themes (lock screen themes most often). Before updating, uninstall themes or be ready to delete the folders above. Afterwards, update NXThemes Installer, let it download its patches for the new firmware, run "Extract home menu" again, and reinstall themes one at a time to find a broken one.</P>
+                <H>NXThemes Installer crashes when it opens</H>
+                <P>Usually the archive bit is set on the SD card's files, which happens after copying them from a Mac. Run Hekate's "Fix archive bit" tool on the SD card, then try again.</P>
+                <H>"The provided layout is not compatible"</H>
+                <P>The .nxtheme was made for another screen than the one it's being installed to, or the installer is older than the theme. Update NXThemes Installer; the studio always writes the right target for each screen.</P>
+                <H>The background has bands or looks soft</H>
+                <P>The console keeps theme backgrounds as 1280×720 DXT1 textures, which store fewer colours than a JPG, so smooth gradients turn into bands, and on a TV the image is scaled up. The preview shows this (Background tab, Console compression). Raise Grain a little to break up bands, or pick an image with more texture.</P>
                 <H>Something in the theme doesn't look like the preview</H>
                 <P>Open the Layout tab's compatibility list and the Inspector's notes for the pane. If a pane is missing in your firmware's layout, the installer skips it. If the problem remains, please report it with the .nxtheme and your firmware version.</P>
                 <H>The studio itself</H>

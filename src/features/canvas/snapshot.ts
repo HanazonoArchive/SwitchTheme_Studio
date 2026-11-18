@@ -24,3 +24,19 @@ export function snapshotRegion(x: number, y: number, w: number, h: number): stri
   }
 }
 
+
+/**
+ * The whole screen as the console would show it (layout pixels, 1:1), as a PNG blob: for sharing,
+ * or for the screenshot Themezer asks for when uploading. Selection outlines aren't part of the
+ * picture (they're drawn over the canvas, not in it).
+ */
+export async function snapshotScreen(width: number, height: number): Promise<Blob | null> {
+  const app = lastApp;
+  if (!app) return null;
+  try {
+    const c = app.renderer.extract.canvas({ target: app.stage, frame: new Rectangle(0, 0, width, height), resolution: 1 }) as HTMLCanvasElement;
+    return await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
+  } catch {
+    return null;
+  }
+}

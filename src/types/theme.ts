@@ -25,6 +25,8 @@ export interface ImageAdjustments {
   brightness: number;
   contrast: number;
   dim: number;
+  /** Fine noise (0–1) that breaks up the banding DXT1 compression puts in smooth gradients. */
+  grain?: number;
 }
 
 export interface ThemeScreen {

@@ -1,3 +1,4 @@
+import { compressCanvas } from '../theme/consoleView';
 import type { ScreenTarget, ThemeScreen } from '../../types/theme';
 import type { LayoutFilePatch } from './patch';
 
@@ -138,8 +139,11 @@ export function iconFiles(screen: ThemeScreen): { slot: AppletIconSlot; file: { 
   return out;
 }
 
-/** Loads a screen's custom icons as data URLs (applet icons as white silhouettes). */
-export async function loadAppletIcons(screen: ThemeScreen): Promise<AppletIcon[]> {
+/**
+ * Loads a screen's custom icons as data URLs (applet icons as white silhouettes). With
+ * `asConsole`, each one goes through DXT5 first, as NXThemes Installer stores it.
+ */
+export async function loadAppletIcons(screen: ThemeScreen, asConsole = false): Promise<AppletIcon[]> {
   const out: AppletIcon[] = [];
   for (const { slot, file } of iconFiles(screen)) {
     try {
@@ -149,6 +153,7 @@ export async function loadAppletIcons(screen: ThemeScreen): Promise<AppletIcon[]
       c.height = bmp.height;
       const g = c.getContext('2d')!;
       g.drawImage(bmp, 0, 0);
+      if (asConsole && c.width % 4 === 0 && c.height % 4 === 0) compressCanvas(c, true);
       if (slot.mono) {
         const d = g.getImageData(0, 0, c.width, c.height);
         for (let i = 0; i < d.data.length; i += 4) d.data[i] = d.data[i + 1] = d.data[i + 2] = 255;

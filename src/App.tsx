@@ -37,6 +37,7 @@ import { editPane, hasLayoutChanges, revertPane, setDrawOrder, splitPaneKey, typ
 import { FW, stampFirmware } from './lib/layout/installerFixes';
 import { getPaneInfo } from './lib/layout/paneModel';
 import { loadAppletIcons, type AppletIcon } from './lib/layout/appletIcons';
+import { useConsoleCompression } from './lib/theme/consoleView';
 import { loadStockLayouts } from './lib/stock/stockPack';
 import { isCommonSzs, loadSavedSystemLayouts, parseSystemSzs, removeSystemSzs, saveSystemSzs, type SystemLayoutMap } from './lib/layout/systemLayouts';
 import { loadWallpaper } from './lib/theme/images';
@@ -51,6 +52,7 @@ interface EditorDoc {
   locked: ReadonlySet<string>;
 }
 const EMPTY_IDS: ReadonlySet<string> = new Set();
+const NO_PATCH: LayoutPatch = {};
 type EditOpts = { transient?: boolean; label?: string };
 const paneName = (key: string) => key.slice(key.indexOf('::') + 2);
 /** History label for a pane edit: what changed, on which pane. */
@@ -187,16 +189,17 @@ export function App() {
   /* ------------------------------ scene ------------------------------ */
 
   // The theme's custom icons (album.png, lock.png, ...), decoded for the preview.
+  const consoleCompression = useConsoleCompression();
   const [icons, setIcons] = useState<{ files: ThemeScreen['extraFiles']; icons: AppletIcon[] } | null>(null);
   const extraFiles = activeScreen?.extraFiles;
   useEffect(() => {
     if (!activeScreen || !extraFiles?.length) return;
     let cancelled = false;
-    loadAppletIcons(activeScreen).then((list) => !cancelled && setIcons({ files: extraFiles, icons: list }));
+    loadAppletIcons(activeScreen, consoleCompression).then((list) => !cancelled && setIcons({ files: extraFiles, icons: list }));
     return () => {
       cancelled = true;
     };
-  }, [extraFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [extraFiles, consoleCompression]); // eslint-disable-line react-hooks/exhaustive-deps
   const activeIcons = useMemo(() => (icons && icons.files === extraFiles ? icons.icons : []), [icons, extraFiles]);
 
   // Lock screen: with nothing suspended it rests centred with the HOME button and no status bar
@@ -213,9 +216,14 @@ export function App() {
     () => (activeSystem && activeScreen ? buildSource(activeSystem, activeScreen.layout, true, true, activeIcons, { lockCentred: screenMock.lockCentred }) : null),
     [activeSystem, activeScreen?.layout, activeIcons, screenMock.lockCentred], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // common.szs (footer, headers, dialogs) is shared by the qlaunch screens, and the installer only
+  // patches it when it installs a Home menu theme (NxEntry: targetPart == "home"). So every screen
+  // shows the Home menu screen's common.json; another screen's own common.json is never installed.
+  const homeScreen = project?.screens.find((s) => s.target === 'home');
+  const commonPatch = activeScreen ? (activeScreen.target === 'home' ? activeScreen.common : homeScreen?.common) ?? NO_PATCH : null;
   const commonSource = useMemo(
-    () => (systemLayouts.common && activeScreen ? buildSource(systemLayouts.common, activeScreen.common ?? {}, true, false) : null),
-    [systemLayouts.common, activeScreen?.common], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (systemLayouts.common && commonPatch ? buildSource(systemLayouts.common, commonPatch, true, false) : null),
+    [systemLayouts.common, commonPatch],
   );
   const scene = useMemo(
     () =>
@@ -226,7 +234,6 @@ export function App() {
   );
 
   // Player select opens over the Home menu: its transparent parts show Home, blurred.
-  const homeScreen = project?.screens.find((s) => s.target === 'home');
   const underlay = useMemo(() => {
     const sys = systemLayouts.home;
     if (activeScreen?.target !== 'psl' || !sys) return null;

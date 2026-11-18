@@ -419,3 +419,40 @@ taken: Themezer's overlay PNGs are renders of the console UI, and the studio pre
 - Footer: qlaunch draws it through `Footer.bflyt` (its `L_Footer` part is `FooterAll.bflyt`), so the
   preview now renders from `Footer.bflyt`; presets that hide `L_Footer` hide the footer in the
   preview too.
+
+## Console compression (DXT1/DXT5)
+
+`src/lib/theme/dxt.ts` ports `stb_dxt.h` 1.12, the encoder `ImageConversion::ToDDS` runs on the
+console (`STB_DXT_DITHER | STB_DXT_HIGHQUAL`; dither is a no-op in 1.12). Checked against the C
+code compiled with gcc: identical blocks for a 1280×720 gradient, the Gengar background and a
+64×56 icon (DXT5). With `-mfma -ffp-contract=fast` (what an aarch64 build may do) one block in
+57 600 differs, from a fused multiply-add in the power iteration. `tests/dxt.test.ts` pins a 16×8
+card against the C output.
+
+- The preview encodes and decodes the rendered background (and custom icons as DXT5) when Console
+  compression is on (default; `sts.consoleCompression` in localStorage). A `.dds` background is
+  shown as is.
+- `gradientShare` measures how much of the picture is smooth gradient (4×4 blocks flat inside,
+  stepping 0.3–6 levels to their neighbours). Above 40% the Background tab mentions banding.
+  Calibrated on real themes: Gengar 30%, a pastel bokeh background 69%, a busy photo 0%.
+- Grain: ±8 levels of luma noise × strength, from a hash of the pixel index (stable across
+  exports). Error metrics get worse with grain, but the bands visibly disappear; it's a
+  perceptual fix, so it's opt-in.
+
+## common.szs belongs to the Home menu theme
+
+`NxEntry::DoInstall` patches common.szs only when installing a `home` theme
+(`targetPart == "home" && theme.HasCommonLayout() && Settings::UseCommon`). The preview of every
+qlaunch screen now uses the Home menu screen's common.json; a common.json in another screen's
+.nxtheme is never installed (the export check already warns about it).
+
+## Research notes (Nov 2026)
+
+What theme makers ask about (r/NXThemes, the injector's issues, GBAtemp, Themezer FAQ):
+crashes after installing (delete `atmosphere/contents/0100000000001000/romfs/lyt`), the installer
+crashing on start (archive bit), "layout is not compatible", blurry or banded backgrounds (#146:
+DXT1, answered by exelix11), losing the Album when a layout hides it, editing an existing theme's
+colours (vertex vs material colours), Themezer wanting screenshots, and themes breaking after
+system updates (#198, 23.0). The pack README and Help → If something goes wrong cover these.
+Ideas not done yet: custom game icons for sys-tweak (`atmosphere/contents/<title id>/icon.jpg`,
+256×256 baseline JPG under 128 KB), and a warning when a layout hides an applet button.

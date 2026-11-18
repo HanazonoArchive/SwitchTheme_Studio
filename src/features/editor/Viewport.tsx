@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Grid3x3, Info, Magnet, Minus, Moon, MousePointer2, Plus, Ruler, Scan, Square, Sun, ArrowLeft, SquareDashed } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Grid3x3, Info, Magnet, Minus, Moon, MousePointer2, Plus, Ruler, Scan, Square, Sun, ArrowLeft, SquareDashed } from 'lucide-react';
 import type { ThemeScreen } from '../../types/theme';
 import type { Scene, SceneNode } from '../../lib/render/scene';
 import type { MockSystemState } from '../../types/simulation';
+import { snapshotScreen } from '../canvas/snapshot';
+import { downloadBlob } from '../../lib/theme/nxtheme';
 import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
 import { STOCK_BG } from '../../lib/theme/stock';
 import { bounds } from '../../lib/render/matrix';
@@ -567,6 +569,21 @@ export const Viewport: React.FC<ViewportProps> = ({
         <button className="ui-icon-btn" title="Focus next game" onClick={() => onUpdateMockState({ selectedGameIndex: Math.min(games - 1, mockState.selectedGameIndex + 1) })}>
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
+        {!exploded && scene && activeScreen && (
+          <>
+            <span className="ui-sep" />
+            <button
+              className="ui-icon-btn"
+              title="Save a screenshot of this screen (1280×720 PNG) to share it or upload the theme"
+              onClick={async () => {
+                const blob = await snapshotScreen(scene.width, scene.height);
+                if (blob) downloadBlob(blob, `${activeScreen.name}.png`.replace(/[\\/:*?"<>|]/g, '_'));
+              }}
+            >
+              <Camera className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
       </div>
     </section>
   );

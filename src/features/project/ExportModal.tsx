@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { X, Download, FileArchive, PackageCheck, AlertTriangle, XCircle } from 'lucide-react';
 import type { ThemeProject, ThemeScreen } from '../../types/theme';
 import type { SystemLayoutMap } from '../../lib/layout/systemLayouts';
-import { buildNxTheme, buildThemePack, checkScreen, downloadBlob, safeFileName } from '../../lib/theme/nxtheme';
+import { bootLogoScreen, buildNxTheme, buildThemePack, checkScreen, downloadBlob, safeFileName } from '../../lib/theme/nxtheme';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ interface ExportModalProps {
 export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project, activeScreen, systemLayouts }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bootLogo, setBootLogo] = useState(false);
   const checks = useMemo(() => project.screens.map((s) => ({ screen: s, issues: checkScreen(s, systemLayouts[s.target]) })), [project, systemLayouts]);
 
   if (!isOpen) return null;
@@ -79,7 +80,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
           <button
             disabled={isExporting || exportable === 0}
-            onClick={() => run(async () => downloadBlob(await buildThemePack(project, systemLayouts), `${safeFileName(project.name)}.zip`))}
+            onClick={() => run(async () => downloadBlob(await buildThemePack(project, systemLayouts, { bootLogo }), `${safeFileName(project.name)}.zip`))}
             className="w-full text-left p-3.5 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] hover:border-[var(--accent)] transition flex items-center justify-between disabled:opacity-40 disabled:hover:border-[var(--border)]"
           >
             <div className="flex items-center gap-3">
@@ -94,8 +95,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
             <Download className="w-4 h-4 text-[var(--text-2)]" />
           </button>
 
+          {bootLogoScreen(project) && (
+            <label className="flex items-start gap-2 text-[12px] text-[var(--text-2)] leading-snug px-1">
+              <input type="checkbox" className="accent-[var(--accent)] mt-0.5" checked={bootLogo} onChange={(e) => setBootLogo(e.target.checked)} />
+              <span>
+                Add a <b className="text-[var(--text)]">Hekate boot logo</b> to the pack: the {bootLogoScreen(project)!.name} background as a picture NXThemes Installer can install as the boot image.
+              </span>
+            </label>
+          )}
+
           <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
-            Backgrounds are written as a baseline 1280×720 image.jpg with your adjustments applied. Untouched valid images and DXT1 .dds files are copied as-is.
+            The pack includes a README with install steps and what to do if a theme won't load. Backgrounds are written as a baseline 1280×720 image.jpg with your adjustments applied. Untouched valid images and DXT1 .dds files are copied as-is.
           </p>
           {error && <div className="p-2 rounded bg-red-950/40 border border-red-500/40 text-red-300 text-[12px]">{error}</div>}
           {isExporting && <div className="text-[12px] text-[var(--text-2)]">Building…</div>}

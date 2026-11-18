@@ -6,7 +6,7 @@ import { normaliseTarget, TARGET_ORDER, targetInfo } from '../layout/targets';
 import { parseSarc } from '../nx/sarc';
 import { checkCompatibility } from '../layout/compatibility';
 import type { SystemLayout, SystemLayoutMap } from '../layout/systemLayouts';
-import { exportWallpaper, loadWallpaper } from './images';
+import { exportWallpaper, renderWallpaper, loadWallpaper } from './images';
 
 /** info.json format version written by current injector/installer (CommonInfo.NxThemeFormatVersion). */
 export const NXTHEME_VERSION = 17;
@@ -202,12 +202,29 @@ export function safeFileName(s: string) {
   return s.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'theme';
 }
 
-export async function buildThemePack(project: ThemeProject, systemLayouts: SystemLayoutMap = {}): Promise<Blob> {
+export interface PackOptions {
+  /**
+   * Add the Home menu background as a picture NXThemes Installer can install as the Hekate boot
+   * logo (it lists pictures in sd:/themes/ and offers "Hekate boot image" as a target).
+   */
+  bootLogo?: boolean;
+}
+
+/** The screen whose background makes the boot logo: the Home menu, else the first with one. */
+export const bootLogoScreen = (project: ThemeProject) => project.screens.find((s) => s.target === 'home' && s.wallpaper) ?? project.screens.find((s) => s.wallpaper);
+
+export async function buildThemePack(project: ThemeProject, systemLayouts: SystemLayoutMap = {}, options: PackOptions = {}): Promise<Blob> {
   const pack = new JSZip();
-  const folder = pack.folder(safeFileName(project.name))!;
+  const name = safeFileName(project.name);
+  const folder = pack.folder(name)!;
   for (const screen of project.screens) {
     if (checkScreen(screen, systemLayouts[screen.target]).some((c) => c.level === 'error')) continue;
-    folder.file(`${safeFileName(project.name)} (${screen.name}).nxtheme`, await buildNxTheme(project, screen));
+    folder.file(`${name} (${screen.name}).nxtheme`, await buildNxTheme(project, screen));
+  }
+  const logo = options.bootLogo ? bootLogoScreen(project) : undefined;
+  if (logo?.wallpaper) {
+    const canvas = await renderWallpaper(logo.wallpaper, logo.adjustments);
+    folder.file(`${name} (boot logo).jpg`, await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Boot logo export failed'))), 'image/jpeg', 0.95)));
   }
   folder.file(
     'README.txt',
@@ -215,10 +232,28 @@ export async function buildThemePack(project: ThemeProject, systemLayouts: Syste
       `Theme: ${project.name}`,
       `Author: ${project.author}`,
       '',
-      'Install:',
-      `1. Copy the .nxtheme files to sd:/themes/${safeFileName(project.name)}/ on your Switch SD card.`,
-      '2. Open NXThemes Installer, pick the files and install them.',
-      '3. Reboot (or restart the home menu from the installer) to see the result.',
+      'Install',
+      `1. Copy this folder to sd:/themes/ on your Switch SD card (so the files are in sd:/themes/${name}/).`,
+      '2. Boot your custom firmware, open the Homebrew Menu, then NXThemes Installer.',
+      '3. Install each .nxtheme (one per screen), then reboot to see the result.',
+      ...(logo
+        ? [`4. Optional: select "${name} (boot logo).jpg" in the installer and install it as "Hekate boot image" (needs Hekate with a boot wait time above 0).`]
+        : []),
+      '',
+      'If something goes wrong',
+      '- The console crashes or shows an error on boot after installing: delete the folder',
+      '  sd:/atmosphere/contents/0100000000001000/romfs/lyt (home menu themes) and reboot.',
+      '  The other screens live under 0100000000001013 (User page) and 0100000000001007 (Player select).',
+      '  Or use "Uninstall" in NXThemes Installer, which does the same.',
+      '- NXThemes Installer crashes when it starts (often after copying files from a Mac): run',
+      "  Hekate's \"Fix archive bit\" tool on the SD card.",
+      '- "The provided layout is not compatible": the .nxtheme was made for a different screen, or',
+      '  the installer is older than the theme. Update NXThemes Installer.',
+      '- After a system update, reinstall your themes: the update replaces the home menu files.',
+      '- Backgrounds look a bit soft on a TV: themes are 1280x720 and the console stores them',
+      '  compressed (DXT1). That is a console limit.',
+      '',
+      'Made with SwitchTheme Studio.',
     ].join('\n'),
   );
   return pack.generateAsync({ type: 'blob', compression: 'DEFLATE' });

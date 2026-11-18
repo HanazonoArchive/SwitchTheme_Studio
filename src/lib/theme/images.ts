@@ -135,7 +135,22 @@ export function wallpaperIssues(w: Wallpaper): string[] {
   return issues;
 }
 
-/** Same math the preview and export share: CSS brightness() then contrast(), then a black dim layer. */
+/** Repeatable noise in [-1, 1) for a pixel index (so preview and export get the same grain). */
+const noise = (i: number) => {
+  let h = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 0x80000000 - 1;
+};
+
+/** Grain strength 1 = ±8 levels of luma noise: enough to dither DXT1's 5/6-bit steps. */
+const GRAIN_LEVELS = 8;
+
+export const hasAdjustments = (a: ImageAdjustments) => a.brightness !== 1 || a.contrast !== 1 || a.dim !== 0 || (a.grain ?? 0) > 0;
+
+/**
+ * Same math the preview and export share: CSS brightness() then contrast(), then a black dim
+ * layer, then grain.
+ */
 export function adjustPixels(data: Uint8ClampedArray, a: ImageAdjustments) {
   const keep = 1 - a.dim;
   for (let i = 0; i < data.length; i += 4) {
@@ -146,6 +161,19 @@ export function adjustPixels(data: Uint8ClampedArray, a: ImageAdjustments) {
       v *= keep;
       data[i + c] = Math.round(Math.min(1, Math.max(0, v)) * 255);
     }
+  }
+  addGrain(data, a.grain ?? 0);
+}
+
+/** Adds the grain adjustment: luma noise, the same on every export (the clamped array keeps 0–255). */
+export function addGrain(data: Uint8ClampedArray, grain: number) {
+  if (!(grain > 0)) return;
+  const amp = grain * GRAIN_LEVELS;
+  for (let i = 0; i < data.length; i += 4) {
+    const n = Math.round(noise(i >> 2) * amp);
+    data[i] += n;
+    data[i + 1] += n;
+    data[i + 2] += n;
   }
 }
 
@@ -167,7 +195,7 @@ export async function renderWallpaper(w: Wallpaper, a: ImageAdjustments): Promis
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
   ctx.drawImage(img, (SCREEN_W - dw) / 2, (SCREEN_H - dh) / 2, dw, dh);
-  if (a.brightness !== 1 || a.contrast !== 1 || a.dim !== 0) {
+  if (hasAdjustments(a)) {
     const data = ctx.getImageData(0, 0, SCREEN_W, SCREEN_H);
     adjustPixels(data.data, a);
     ctx.putImageData(data, 0, 0);
@@ -177,7 +205,7 @@ export async function renderWallpaper(w: Wallpaper, a: ImageAdjustments): Promis
 
 /** Returns the file to put in the .nxtheme: { name: image.jpg | image.dds, blob }. */
 export async function exportWallpaper(w: Wallpaper, a: ImageAdjustments): Promise<{ name: string; blob: Blob; reencoded: boolean }> {
-  const untouched = a.brightness === 1 && a.contrast === 1 && a.dim === 0;
+  const untouched = !hasAdjustments(a);
   const right = w.width === SCREEN_W && w.height === SCREEN_H;
   if (untouched && right && w.format === 'jpg' && !w.progressive) return { name: 'image.jpg', blob: w.blob, reencoded: false };
   if (untouched && right && w.format === 'dds' && w.ddsEncoding === 'DXT1') return { name: 'image.dds', blob: w.blob, reencoded: false };

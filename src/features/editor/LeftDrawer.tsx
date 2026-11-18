@@ -18,7 +18,8 @@ import { fixesFor } from '../../lib/layout/paneModel';
 import { FW, stampFirmware, themeTargetFirmware } from '../../lib/layout/installerFixes';
 import { checkCompatibility } from '../../lib/layout/compatibility';
 import { wallpaperIssues } from '../../lib/theme/images';
-import { useWallpaperPreview } from '../../lib/theme/useWallpaperPreview';
+import { useWallpaperPreviewInfo } from '../../lib/theme/useWallpaperPreview';
+import { setConsoleCompression, useConsoleCompression } from '../../lib/theme/consoleView';
 import { UsersEditor } from './UsersEditor';
 import { PresetsPanel } from './PresetsPanel';
 
@@ -97,7 +98,8 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
   const [browseFile, setBrowseFile] = useState<string | null>(null);
   const [jsonDraft, setJsonDraft] = useState<string | null>(null);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const previewUrl = useWallpaperPreview(activeScreen.wallpaper, activeScreen.adjustments);
+  const { url: previewUrl, banding } = useWallpaperPreviewInfo(activeScreen.wallpaper, activeScreen.adjustments);
+  const consoleCompression = useConsoleCompression();
 
   const layout = activeScreen.layout;
   const info = targetInfo(activeScreen.target);
@@ -311,6 +313,29 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
                 <Slider name="Dimming" value={activeScreen.adjustments.dim} min={0} max={0.8} step={0.05} onChange={(dim) => setAdjust({ dim })} />
                 <Slider name="Brightness" value={activeScreen.adjustments.brightness} min={0.5} max={1.5} step={0.05} onChange={(brightness) => setAdjust({ brightness })} />
                 <Slider name="Contrast" value={activeScreen.adjustments.contrast} min={0.5} max={1.5} step={0.05} onChange={(contrast) => setAdjust({ contrast })} />
+                <Slider name="Grain" value={activeScreen.adjustments.grain ?? 0} min={0} max={1} step={0.05} onChange={(grain) => setAdjust({ grain })} />
+              </div>
+            )}
+
+            {activeScreen.wallpaper && (
+              <div className={`${card} space-y-2`}>
+                <label className="flex items-center justify-between gap-2">
+                  <span className={label}>Console compression</span>
+                  <input type="checkbox" className="accent-[var(--accent)]" checked={consoleCompression} onChange={(e) => setConsoleCompression(e.target.checked)} />
+                </label>
+                <p className="text-[12px] text-[var(--text-3)] leading-relaxed">
+                  {activeScreen.wallpaper.format === 'dds'
+                    ? 'This background is already DXT1, so the preview shows exactly what the console stores.'
+                    : consoleCompression
+                      ? 'The preview shows the background as the console stores it: NXThemes Installer converts image.jpg to DXT1 with the same encoder used here. Turn this off to compare with your original.'
+                      : 'Off: the preview shows your original image. The console stores it as DXT1, which loses some colour detail.'}
+                </p>
+                {activeScreen.wallpaper.format !== 'dds' && banding && banding.gradient > 0.4 && (
+                  <Note tone="info" compact>
+                    About {Math.round(banding.gradient * 100)}% of this background is smooth gradient, which the console can show with faint bands or blotches.{' '}
+                    {(activeScreen.adjustments.grain ?? 0) > 0 ? 'Grain is on to soften them; compare with Console compression on.' : <>A little <b>Grain</b> (10–30%) softens them; compare with Console compression on.</>}
+                  </Note>
+                )}
               </div>
             )}
           </div>

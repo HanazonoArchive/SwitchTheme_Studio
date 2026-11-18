@@ -235,6 +235,19 @@ the games. The **Console** tab sets the clock, users and their pictures, the gam
 game is suspended (on the lock screen this switches between the centred HOME button and the
 Continue layout with the status bar).
 
+**Backgrounds as the console shows them.** NXThemes Installer converts `image.jpg` to a DXT1
+texture on the console (and icon PNGs to DXT5), which keeps fewer colours: smooth gradients get
+faint bands. The preview runs the same encoder (a port of `stb_dxt` 1.12, bit-identical to the
+installer's), so the canvas shows the background as the console will. **Background → Console
+compression** turns this off to compare with the original, the tab says when a picture is mostly
+smooth gradient, and the **Grain** adjustment adds fine noise that softens the bands.
+
+The footer and headers come from `common.szs`, which the installer only patches with a Home menu
+theme; the All Software and Settings previews therefore show the Home menu screen's `common.json`.
+
+**Screenshots.** The camera button under the canvas saves the screen as a 1280×720 PNG, to share
+the theme or for the screenshots Themezer asks for when you upload.
+
 ### 4. Export
 
 **Export .nxtheme** downloads the current screen as an `.nxtheme`, or every screen as a theme pack
@@ -242,6 +255,10 @@ Continue layout with the status bar).
 with NXThemes Installer. An `.nxtheme` is the installer's own format (a zip with `info.json`,
 `layout.json`, `common.json`, the image and icons, format version 17); themes opened and exported
 again install byte-for-byte the same as the originals (see the engineering notes).
+
+The pack has a README with the install steps and what to do if a theme won't load. Tick **Hekate
+boot logo** to add the Home menu background as a picture NXThemes Installer can install as the
+Hekate boot image.
 
 **Theme types**
 

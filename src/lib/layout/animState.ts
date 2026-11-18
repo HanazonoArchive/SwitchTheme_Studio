@@ -37,6 +37,9 @@ const PER_LAYOUT: Record<string, Step[]> = {
   // Idle lock screen on 13.0+: news on the left, the suspended game and "Continue" on the right.
   EntMain: [['LockMainOut', 'end'], ['SpecialNewsTextOut', 'end']],
   FlcCntMain: [['ContentsIn', 'end'], ['RefreshIn', 'end']],
+  // News cards: the list mode (frame 0 of ModeFilter) shows the card's content at full size; the
+  // layout's own N_CntWrp scale (0.5) is the filter-list mode.
+  NtfBtnSquareList: [['ModeFilter', 'start']],
 };
 
 /**

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, LayoutTemplate, Loader2, RotateCcw, Search } from 'lucide-react';
 import type { ThemeScreen } from '../../types/theme';
-import { composePreset, loadPresets, type LayoutPreset, type PresetChoices } from '../../lib/layout/presets';
+import { composePreset, loadPresets, validOptionValue, type LayoutPreset, type PresetChoices, type PresetOption } from '../../lib/layout/presets';
 import { hasLayoutChanges } from '../../lib/layout/patch';
 import { targetInfo } from '../../lib/layout/targets';
 import { Note } from '../../components/Note';
@@ -19,6 +19,34 @@ interface Props {
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** A number or text option (Themezer's INTEGER / DECIMAL / STRING): empty keeps the layout as designed. */
+const ValueOption: React.FC<{ option: PresetOption; value: string; onCommit: (v: string) => void }> = ({ option, value, onCommit }) => {
+  const [draft, setDraft] = useState(value);
+  const [prev, setPrev] = useState(value);
+  if (value !== prev) {
+    setPrev(value);
+    setDraft(value);
+  }
+  const ok = draft === '' || validOptionValue(option, draft);
+  const range = option.min !== undefined && option.max !== undefined ? (option.type === 'string' ? `${option.min}–${option.max} characters` : `${option.min}–${option.max}`) : '';
+  const commit = () => ok && draft !== value && onCommit(draft.trim());
+  return (
+    <label className="flex items-center justify-between gap-2 text-[12px] text-[var(--text)]">
+      <span className="min-w-0">{option.name}</span>
+      <input
+        className={`ui-input !h-6 !py-0 text-[12px] w-[40%] ${ok ? '' : '!border-red-400'}`}
+        inputMode={option.type === 'string' ? 'text' : option.type === 'integer' ? 'numeric' : 'decimal'}
+        placeholder={range || 'As designed'}
+        title={ok ? (range ? `${option.name}: ${range}. Empty keeps the layout as designed.` : 'Empty keeps the layout as designed.') : `Enter ${option.type === 'integer' ? 'a whole number' : option.type === 'decimal' ? 'a number' : 'text'}${range ? ` (${range})` : ''}`}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+      />
+    </label>
+  );
+};
 
 export const PresetsPanel: React.FC<Props> = ({ screen, onApply }) => {
   const [loaded, setLoaded] = useState<{ target: string; list: LayoutPreset[] } | null>(null);
@@ -74,6 +102,13 @@ export const PresetsPanel: React.FC<Props> = ({ screen, onApply }) => {
                   onChange={(e) => apply(active, { ...choices, [o.name]: e.target.checked }, `${active.name}: ${o.name} ${e.target.checked ? 'on' : 'off'}`)}
                 />
               </label>
+            ) : o.type !== 'select' ? (
+              <ValueOption
+                key={o.name}
+                option={o}
+                value={typeof choices[o.name] === 'string' ? String(choices[o.name]) : ''}
+                onCommit={(v) => apply(active, { ...choices, [o.name]: v || undefined }, `${active.name}: ${o.name} ${v || 'default'}`)}
+              />
             ) : (
               <label key={o.name} className="flex items-center justify-between gap-2 text-[12px] text-[var(--text)]">
                 <span className="min-w-0">{o.name}</span>

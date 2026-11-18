@@ -456,3 +456,34 @@ colours (vertex vs material colours), Themezer wanting screenshots, and themes b
 system updates (#198, 23.0). The pack README and Help → If something goes wrong cover these.
 Ideas not done yet: custom game icons for sys-tweak (`atmosphere/contents/<title id>/icon.jpg`,
 256×256 baseline JPG under 128 KB), and a warning when a layout hides an applet button.
+
+## Layout rendering rules found against Themezer's previews (Nov 2026)
+
+Every Themezer layout (87, from ThemezerNX/Layouts at the commit in public/presets/NOTICE.txt) was
+rendered in the studio and put next to its `overlay-dark.png`. Those previews come from Themezer's
+renderer (transparent background, a suspended game, 4 users), not from a console, so differences
+were only fixed where the console behaviour is known. Rules found:
+
+- **HOME game icon size**: qlaunch ignores the scale of the `N_Icon_XX` slots in RdtBase; the icon
+  size comes from the `RdtBtnIconGame` RootPane scale. Layouts that scale both (Left/Right Aligned
+  Rounded, Abstract, Split, Eternal Returnal, Fanciful Finch, Side View Right) had icons too small.
+  PixiView uses `node.scaleX/Y`, so both those and `world` must carry it.
+- **All Software rows** are placed by code: the row X/Y in the layout are ignored, and `N_Btm`
+  (Redownload Software) follows the last row.
+- **All Software header**: L_BtnGrp / L_BtnSort are BtnExpand parts filled at runtime ("L Groups",
+  "R Sort/Filter"), packed right to left from x = 1244. The title follows `L_Header`.
+- **News**: `NtfBtnSquareList_ModeFilter` frame 0 gives the cards their full size (the stock pack now
+  keeps that animation), and the list clips between the header and footer lines.
+- **Injected menus in N_NavPos** (SetBaseNav, MypNav) draw after `L_NavBg`, which layouts like
+  2Simple colour.
+- **Footers**: News, User page and Player select get their button hints; User and Player select use
+  the stock common.szs (common.json belongs to the Home theme only).
+- **Applet balloons**: layouts that keep them open (Careful) show the applet names.
+- Themezer INTEGER / DECIMAL / STRING options are supported (`??{integer}??` tokens).
+
+Checked and left as is: the lock screen shows the suspended game (console) where Themezer always
+draws the HOME glyph; Lock "Doge" moves the button off-screen when nothing is suspended.
+Open: `S_RoundRadius` stored as an int holding the bits of 42.0f is read as 42 (rounded squares);
+Themezer draws circles. Needs a console photo to settle.
+
+`tests/layoutRules.test.ts` pins these rules using the built-in stock pack (no Nintendo pixels).

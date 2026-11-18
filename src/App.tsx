@@ -220,7 +220,15 @@ export function App() {
   // patches it when it installs a Home menu theme (NxEntry: targetPart == "home"). So every screen
   // shows the Home menu screen's common.json; another screen's own common.json is never installed.
   const homeScreen = project?.screens.find((s) => s.target === 'home');
-  const commonPatch = activeScreen ? (activeScreen.target === 'home' ? activeScreen.common : homeScreen?.common) ?? NO_PATCH : null;
+  // The User page and Player select are separate applets: the Home theme's common.json never
+  // reaches them, they only borrow the stock footer.
+  const commonPatch = !activeScreen
+    ? null
+    : activeScreen.target === 'home'
+      ? activeScreen.common ?? NO_PATCH
+      : activeScreen.target === 'user' || activeScreen.target === 'psl'
+        ? NO_PATCH
+        : homeScreen?.common ?? NO_PATCH;
   const commonSource = useMemo(
     () => (systemLayouts.common && commonPatch ? buildSource(systemLayouts.common, commonPatch, true, false) : null),
     [systemLayouts.common, commonPatch],

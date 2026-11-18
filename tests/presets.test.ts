@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { composePreset, mergeLayoutPatch, type LayoutPreset } from '../src/lib/layout/presets';
+import { composePreset, mergeLayoutPatch, validOptionValue, type LayoutPreset, type PresetOption } from '../src/lib/layout/presets';
 
 const preset: LayoutPreset = {
   id: 'p',
@@ -62,5 +62,23 @@ describe('layout presets', () => {
       expect(layouts.length).toBeGreaterThan(0);
       for (const p of layouts) expect(p.layout.Files?.length || p.layout.Anims?.length).toBeTruthy();
     }
+  });
+
+  it('fills value options (Themezer INTEGER) into their token, empty keeps the layout', () => {
+    const border: PresetOption = {
+      name: 'Cursor Border Size',
+      type: 'integer',
+      priority: 23,
+      global: true,
+      patch: { Files: [{ FileName: 'blyt/Cursor3.bflyt', Patches: [{ PaneName: 'P_Main', UsdPatches: [{ PropName: 'S_BorderSize', PropValues: ['??{integer}??'], type: 2 }] }] }] },
+    };
+    const p: LayoutPreset = { ...preset, options: [border] };
+    expect(composePreset(p, {}).layout).toEqual(preset.layout);
+    const l = composePreset(p, { 'Cursor Border Size': '9' }).layout;
+    const cursor = l.Files!.find((f) => f.FileName === 'blyt/Cursor3.bflyt')!;
+    expect(cursor.Patches![0].UsdPatches![0].PropValues).toEqual(['9']);
+    expect(validOptionValue(border, '9')).toBe(true);
+    expect(validOptionValue(border, '9.5')).toBe(false);
+    expect(validOptionValue({ ...border, min: 0, max: 10 }, '11')).toBe(false);
   });
 });

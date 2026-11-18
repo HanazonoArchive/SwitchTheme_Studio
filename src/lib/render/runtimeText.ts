@@ -12,8 +12,8 @@ export const TEXT_MOCK: Record<string, string> = {
   // System Settings
   'set:L_Header>blyt/TextH1Ex.bflyt::T_00': 'System Settings',
   ...navLabels({
-    L_Sup: 'Support',
-    L_FlightMode: 'Flight Mode',
+    L_Sup: 'Support/Health & Safety',
+    L_FlightMode: 'Airplane Mode',
     L_Display: 'Screen Brightness',
     L_Sound: 'Bluetooth® Audio',
     L_Lock: 'Screen Lock',
@@ -30,13 +30,14 @@ export const TEXT_MOCK: Record<string, string> = {
     L_Tv: 'TV Output',
     L_Hardware: 'System',
   }),
-  'L_CheckFlight>blyt/BtnListCheckText.bflyt::T_00': 'Flight Mode',
+  'L_CheckFlight>blyt/BtnListCheckText.bflyt::T_00': 'Airplane Mode',
   'L_CheckFlight>blyt/BtnListCheckText.bflyt::T_CheckOff': 'Off',
   'L_CheckFlight>blyt/BtnListCheckText.bflyt::T_CheckOn': 'On',
   'L_AsideFlight>blyt/TextBtnListAside.bflyt::T_00':
-    'All wireless communication, such as Wi-Fi and Bluetooth, will be switched off. Some types of wireless communication can still be switched on manually when the console is in flight mode.',
+    'All wireless communication, such as Wi-Fi and Bluetooth, will be turned off. Some types of wireless communication can still be switched on manually when the console is in Airplane Mode.',
 
   // News
+  'blyt/NtfBtnLineAddChannel.bflyt::T_00': 'Find Channels',
   'news:L_Header>blyt/TextH1Ntf.bflyt::T_00': 'News',
   'L_HeadPickUp>blyt/TextH2.bflyt::T_00': 'Pickup',
   'L_HeadLatest>blyt/TextH2.bflyt::T_00': 'Latest News',

@@ -10,12 +10,16 @@ import type { LayoutFilePatch, LayoutPatch, MaterialPatch, PanePatch, UsdPatch }
 
 export interface PresetOption {
   name: string;
-  type: 'toggle' | 'select';
+  /** toggle: on/off; select: one of `choices`; integer/decimal/string: a value put into `patch`. */
+  type: 'toggle' | 'select' | 'integer' | 'decimal' | 'string';
   priority: number;
   /** Offered for every layout of this screen (Themezer's _GLOBAL options). */
   global: boolean;
-  /** Toggle: the patch merged when it's on. */
+  /** Toggle: the patch merged when it's on. Value options: the patch, with ??{integer}?? tokens. */
   patch?: LayoutPatch;
+  /** Value options: limits (a string's length for 'string'). */
+  min?: number;
+  max?: number;
   /** Select: one patch per choice; nothing selected leaves the layout as it is. */
   choices?: { name: string; patch: LayoutPatch }[];
 }
@@ -110,12 +114,37 @@ function dropDeleteMarkers<T>(v: T): T {
   return v;
 }
 
+/** A value option's patch with its token (??{integer}??, ??{decimal}??, ??{string}??) filled in. */
+function withValue(patch: LayoutPatch, type: string, value: string): LayoutPatch {
+  const token = `??{${type}}??`;
+  const fill = (v: unknown): unknown =>
+    typeof v === 'string' ? v.split(token).join(value) : Array.isArray(v) ? v.map(fill) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)])) : v;
+  return fill(patch) as LayoutPatch;
+}
+
+/** Whether a typed value suits a value option (numbers within limits, string length). */
+export function validOptionValue(o: PresetOption, v: string): boolean {
+  if (o.type === 'string') return (o.min === undefined || v.length >= o.min) && (o.max === undefined || v.length <= o.max);
+  const n = Number(v);
+  if (v.trim() === '' || !Number.isFinite(n) || (o.type === 'integer' && !Number.isInteger(n))) return false;
+  return (o.min === undefined || n >= o.min) && (o.max === undefined || n <= o.max);
+}
+
 /** The preset's layout with the chosen options applied, in Themezer's priority order. */
 export function composePreset(preset: LayoutPreset, choices: PresetChoices): { layout: LayoutPatch; common: LayoutPatch | null } {
   let layout: LayoutPatch = structuredClone(preset.layout);
   for (const o of preset.options) {
     const v = choices[o.name];
-    const patch = o.type === 'toggle' ? (v === true ? o.patch : undefined) : o.choices?.find((c) => c.name === v)?.patch;
+    const patch =
+      o.type === 'toggle'
+        ? v === true
+          ? o.patch
+          : undefined
+        : o.type === 'select'
+          ? o.choices?.find((c) => c.name === v)?.patch
+          : typeof v === 'string' && v !== '' && o.patch
+            ? withValue(o.patch, o.type, v)
+            : undefined;
     if (patch) layout = mergeLayoutPatch(layout, structuredClone(patch));
   }
   return { layout: dropDeleteMarkers(layout), common: preset.common ? dropDeleteMarkers(structuredClone(preset.common)) : null };
@@ -123,6 +152,8 @@ export function composePreset(preset: LayoutPreset, choices: PresetChoices): { l
 
 /** Name the editor shows for an applied preset, kept in layout.json's PatchName. */
 export const presetPatchName = (preset: LayoutPreset, choices: PresetChoices) => {
-  const on = preset.options.filter((o) => (o.type === 'toggle' ? choices[o.name] === true : typeof choices[o.name] === 'string')).map((o) => (o.type === 'toggle' ? o.name : String(choices[o.name])));
+  const on = preset.options
+    .filter((o) => (o.type === 'toggle' ? choices[o.name] === true : typeof choices[o.name] === 'string'))
+    .map((o) => (o.type === 'toggle' ? o.name : o.type === 'select' ? String(choices[o.name]) : `${o.name} ${choices[o.name]}`));
   return on.length ? `${preset.name} (${on.join(', ')})` : preset.name;
 };

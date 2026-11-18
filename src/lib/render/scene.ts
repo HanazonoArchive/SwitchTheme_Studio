@@ -119,13 +119,17 @@ const SUSPENDED_GAME = 0;
  * archive wins (BaseTop is shared by Settings, News and the User Page). `after` draws the layout
  * above the slot's own children; `clip` scissors it to the scroll area.
  */
+/** A sub-layout's RootPane as the console uses it under a parts or slot pane: transform and visibility reset. */
+const partRootOf = (root: BflytPane): BflytPane => ({ ...root, visible: true, alpha: 255, position: { X: 0, Y: 0, Z: 0 }, rotation: { X: 0, Y: 0, Z: 0 }, scale: { X: 1, Y: 1 } });
+
 const INJECT: { file: string; pane: RegExp; layout: string; icon?: boolean; after?: boolean; clip?: boolean }[] = [
   { file: 'blyt/RdtBase.bflyt', pane: /^N_Icon_(\d+)$/, layout: ICON_LAYOUT, icon: true },
   { file: 'blyt/FlcBtnIconGameBlock.bflyt', pane: /^N_BtnIconGame_(\d+)$/, layout: 'blyt/FlcBtnIconGame.bflyt', icon: true },
-  { file: 'blyt/BaseTop.bflyt', pane: /^N_NavPos$/, layout: 'blyt/SetBaseNav.bflyt', clip: true },
+  // The menu goes over N_NavPos's own background (L_NavBg), which some layouts colour (2Simple).
+  { file: 'blyt/BaseTop.bflyt', pane: /^N_NavPos$/, layout: 'blyt/SetBaseNav.bflyt', clip: true, after: true },
   { file: 'blyt/BaseTop.bflyt', pane: /^N_CntPosCurrent$/, layout: 'blyt/SetCntFlightMode.bflyt', clip: true },
   { file: 'blyt/BaseTop.bflyt', pane: /^N_HeaderPos$/, layout: 'blyt/SetBaseHeader.bflyt' },
-  { file: 'blyt/BaseTop.bflyt', pane: /^N_NavPos$/, layout: 'blyt/MypNav.bflyt', clip: true },
+  { file: 'blyt/BaseTop.bflyt', pane: /^N_NavPos$/, layout: 'blyt/MypNav.bflyt', clip: true, after: true },
   { file: 'blyt/BaseTop.bflyt', pane: /^N_CntPosCurrent$/, layout: 'blyt/MypMyStatus.bflyt', clip: true },
   { file: 'blyt/BaseTop.bflyt', pane: /^N_HeaderPos$/, layout: 'blyt/MypHeader.bflyt' },
   { file: 'blyt/NtfBase.bflyt', pane: /^N_Root$/, layout: 'blyt/NtfCntList.bflyt', after: true },
@@ -139,11 +143,39 @@ const BUTTON_GLYPH: Record<string, string> = {
   'blyt/EntBtnCenterNtf.bflyt': 'Y',
 };
 
+/** All Software header buttons (BtnExpand parts): key glyph and label, as on the console. */
+const EXPAND_BUTTONS: Record<string, [string, string]> = { L_BtnGrp: ['L', 'Groups'], L_BtnSort: ['R', 'Sort/Filter'] };
+const EXPAND_TEXT = 21;
+const EXPAND_GLYPH = 28;
+const EXPAND_GAP = 10;
+
+/** HOME menu applet names, shown in their balloons (some layouts keep the balloons open as labels). */
+const APPLET_LABELS: Record<string, string> = {
+  L_BtnLR: 'Nintendo Switch Online',
+  L_BtnNoti: 'News',
+  L_BtnShop: 'Nintendo eShop',
+  L_BtnPvr: 'Album',
+  L_BtnCtrl: 'Controllers',
+  L_BtnSet: 'System Settings',
+  L_BtnPow: 'Sleep Mode',
+  L_BtnFlc: 'All Software',
+};
+/** The applet whose balloon this is: the nearest L_Btn* part above it. */
+const appletLabel = (ctx: { file: string; path: string }, name: string) => {
+  if (ctx.file !== 'blyt/RdtBalloonSystemApplet.bflyt' || name !== 'T_Main') return undefined;
+  const parts = ctx.path.split('/').filter((p) => APPLET_LABELS[p]);
+  return parts.length ? APPLET_LABELS[parts[parts.length - 1]] : undefined;
+};
+
 /** Footer button hints per screen (qlaunch builds them from FooterBtn at runtime). */
 const FOOTER_HINTS: Partial<Record<string, [string, string][]>> = {
   home: [['+', 'Options'], ['A', 'Start']],
   apps: [['+', 'Options'], ['B', 'Back'], ['A', 'Start']],
   set: [['B', 'Back'], ['A', 'OK']],
+  news: [['Y', 'Channel List'], ['X', 'Bookmark List'], ['B', 'Back'], ['A', 'OK']],
+  // The User page and Player select are their own applets with the same footer.
+  user: [['B', 'Back'], ['A', 'OK']],
+  psl: [['B', 'Back'], ['A', 'OK']],
 };
 
 /** Panes the installer replaces with the theme background (only when the theme has one). */
@@ -362,8 +394,8 @@ export function buildSource(
     }
   }
   // All Software is a list laid out by code: the rows stack below the N_Top spacer, each as tall
-  // as its own Size.Y (themes with taller tiles set it), so the layout's row positions are
-  // ignored, as on the console. Measured: the first row starts 20 px below N_Top's height
+  // as its own Size.Y (themes with taller tiles set it), so the layout's row positions (X and Y)
+  // are ignored, as on the console. Measured: the first row starts 20 px below N_Top's height
   // (182 px from the top of the screen with the stock 162 px spacer).
   const flc = trees.get('blyt/FlcCntMain.bflyt');
   if (flc) {
@@ -376,9 +408,14 @@ export function buildSource(
     rows.sort((a, b) => a.name.localeCompare(b.name));
     let top = APPS_LIST_TOP + (findChild(flc, 'N_Top')?.size.Y ?? 162);
     for (const r of rows) {
-      r.position = { ...r.position, Y: -(top + r.size.Y / 2) };
+      // X too: Left and Right Rounded move their rows 50 px left, and their Themezer previews
+      // (and the stock list) keep the rows centred in NH_Root.
+      r.position = { ...r.position, X: 0, Y: -(top + r.size.Y / 2) };
       top += r.size.Y;
     }
+    // The list's end (N_Btm: the Redownload Software button) follows the last row.
+    const btm = findChild(flc, 'N_Btm');
+    if (btm && rows.length) btm.position = { ...btm.position, Y: -(top + btm.size.Y / 2) };
     // Sort label: with no group filter only the sort order shows, at the right edge. It goes with
     // the sort button (themes hide L_BtnSort to remove both).
     const sort = findChild(flc, 'N_Sort');
@@ -530,6 +567,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     return undefined;
   };
   const textFor = (ctx: Ctx, name: string): string | undefined =>
+    appletLabel(ctx, name) ??
     (ctx.part ? (TEXT_MOCK[`${ctx.part}>${ctx.file}::${name}`] ?? TEXT_MOCK[`${target}:${ctx.part}>${ctx.file}::${name}`]) : undefined) ??
     TEXT_MOCK[`${target}:${ctx.file}::${name}`] ??
     TEXT_MOCK[`${ctx.file}::${name}`];
@@ -661,8 +699,26 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     if (digit) return canvasContent(`digit|${digit}|${ink}|${w}x${h}`, 0, 0, w, h, (c) => draw.hudGlyph(c, digit, w, h, ink));
 
     // The "All Software" title belongs to L_Header (themes hide it there).
-    if (pane.name === 'N_Header' && ctx.file === 'blyt/FlcCntMain.bflyt' && findChild(pane, 'L_Header')?.visible !== false) {
-      return canvasContent(`appsheader|${ink}`, -640 + 34, 52 - 24, 300, 48, (c) => draw.gridTitle(c, 'All Software', 28, ink));
+    // Drawn on L_Header itself, so layouts that move or scale it (Left Rounded puts it in the
+    // footer at 70%) carry the title along.
+    if (pane.name === 'L_Header' && ctx.file === 'blyt/FlcCntMain.bflyt') {
+      return canvasContent(`appsheader|${ink}`, 34, h / 2 - 16, 300, 48, (c) => draw.gridTitle(c, 'All Software', 28, ink));
+    }
+
+    // All Software's "L Groups" and "R Sort/Filter" (BtnExpand parts whose text and key qlaunch
+    // fills in): packed from the part's anchor leftwards, Sort/Filter first, Groups left of it.
+    if (pane.name === 'NH_Root' && ctx.file === 'blyt/BtnExpand.bflyt' && EXPAND_BUTTONS[ctx.part ?? '']) {
+      const [key, text] = EXPAND_BUTTONS[ctx.part!];
+      const label = findChild(pane, 'T_00');
+      const col = label ? textColor(label) : ink;
+      const width = (t: string) => EXPAND_GLYPH + EXPAND_GAP + draw.measure(t, EXPAND_TEXT);
+      const flc = ctx.src.trees.get('blyt/FlcCntMain.bflyt');
+      const sortShown = flc ? findChild(flc, 'L_BtnSort')?.visible !== false : true;
+      const right = -10 - (ctx.part === 'L_BtnGrp' && sortShown ? width(EXPAND_BUTTONS.L_BtnSort[1]) + 10 + 16 + 10 : 0);
+      const tw = width(text);
+      return canvasContent(`expand|${key}|${text}|${col}|${right}`, right - tw, h / 2 - 18, tw, 36, (c) =>
+        draw.glyphLabel(c, 0, 18, key, text, EXPAND_TEXT, EXPAND_GLYPH, col, toCss(paletteColor(5, dark)!), col),
+      );
     }
 
     if (pane.name === 'N_BtnCnt' && BUTTON_GLYPH[ctx.file]) {
@@ -758,7 +814,13 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     const rad = (rotation * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
-    const local: Mat = [cos * pane.scale.X, sin * pane.scale.X, -sin * pane.scale.Y, cos * pane.scale.Y, x, y];
+    // The Home menu lays out its game slots itself: an N_Icon_XX pane's position counts, its scale
+    // doesn't (the icon's size comes from RdtBtnIconGame's RootPane). Matches every Themezer
+    // layout preview, e.g. Abstract (RootPane 0.39 + N_Icon 0.39 = 100px icons, not 39px).
+    const gameSlot = ctx.file === 'blyt/RdtBase.bflyt' && /^N_Icon_\d+$/.test(pane.name);
+    const sx = gameSlot ? 1 : pane.scale.X;
+    const sy = gameSlot ? 1 : pane.scale.Y;
+    const local: Mat = [cos * sx, sin * sx, -sin * sy, cos * sy, x, y];
     const world = mul(parentWorld, local);
     const childOffsetX = pane.name === 'N_Game' ? -gameScroll : 0;
     const childOffsetY = ctx.file === 'blyt/FlcCntMain.bflyt' && pane.name === 'N_Cnt' ? -appsScroll(pane, world) : 0;
@@ -788,8 +850,8 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
       x,
       y,
       rotation,
-      scaleX: pane.scale.X,
-      scaleY: pane.scale.Y,
+      scaleX: sx,
+      scaleY: sy,
       alpha: FOCUSED_PART[target] === ctx.part && FOCUS_PANES.has(pane.name) ? 1 : pane.alpha / 255,
       opacity: 1,
       rect: { x: rectX(a.originX, w), y: rectY(a.originY, h), w, h },
@@ -805,7 +867,9 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
     };
     if (!hidden) self.content = contentFor(pane, ctx, w, h);
     // The All Software list scrolls between the header and footer lines.
-    if (ctx.file === 'blyt/FlcCntMain.bflyt' && pane.name === 'N_Cnt' && world[3]) self.clip = { top: (SCROLL_TOP - world[5]) / world[3], bottom: (SCROLL_BOTTOM - world[5]) / world[3] };
+    // So does the News list (its header row, with Find Channels, stays outside the clip).
+    if (((ctx.file === 'blyt/FlcCntMain.bflyt' && pane.name === 'N_Cnt') || (ctx.file === 'blyt/NtfCntList.bflyt' && pane.name === 'NH_Root')) && world[3])
+      self.clip = { top: (SCROLL_TOP - world[5]) / world[3], bottom: (SCROLL_BOTTOM - world[5]) / world[3] };
     if (hidden && key !== selectedKey) {
       // Keep hidden panes (and their subtree) in the scene for the layers panel, undrawn.
       self.hidden = true;
@@ -822,7 +886,7 @@ export function buildScene({ system, main, common, hasWallpaper, mock, selectedK
         const ps = pane.partScale ?? { X: 1, Y: 1 };
         // A part's own RootPane is replaced by the prt1 pane: its visibility and transform (which
         // themes sometimes patch, e.g. hiding HudTime's RootPane) have no effect on the console.
-        const root: BflytPane = { ...partRoot, visible: true, alpha: 255, position: { X: 0, Y: 0, Z: 0 }, rotation: { X: 0, Y: 0, Z: 0 }, scale: { X: 1, Y: 1 } };
+        const root = partRootOf(partRoot);
         const n = node(
           root,
           w / ps.X,

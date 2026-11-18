@@ -43,6 +43,13 @@ function readOptions(dir, global) {
       opts.push({ name, type: 'toggle', priority: Number(priority), global, patch: readJson(join(od, folder, files[0])) });
     } else if (type === 'SELECT') {
       opts.push({ name, type: 'select', priority: Number(priority), global, choices: files.map((f) => ({ name: f.replace(/\.json$/, ''), patch: readJson(join(od, folder, f)) })) });
+    } else if (/^(INTEGER|DECIMAL|STRING)(\(.*\))?$/.test(type)) {
+      // A value option: one patch with a ??{integer}?? (or decimal/string) token for the value,
+      // and optional limits in the folder name: INTEGER(min,max), STRING(min length,max length).
+      const [, kind, , args] = type.match(/^([A-Z]+)(\((.+)\))?$/);
+      const [min, max] = args ? args.split(',').map((a) => Number(a.trim())) : [];
+      if (files.length !== 1) throw new Error(`Option ${folder} has ${files.length} JSON files`);
+      opts.push({ name, type: kind.toLowerCase(), priority: Number(priority), global, min, max, patch: readJson(join(od, folder, files[0])) });
     } else {
       console.warn(`Skipped option ${folder}: type ${type} isn't supported yet`);
     }
